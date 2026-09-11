@@ -34,12 +34,61 @@ def tasks(request):
     if request.method == "GET":
         view = request.GET.get("view", "open")
         tags = request.GET.getlist("tag") or ([request.GET["tags"]] if request.GET.get("tags") else [])
-        return JsonResponse({"tasks": [service._task_json(task) for task in service.task_list(view, tags)]})
+        selected_list = request.GET.get("list")
+        try:
+            values = service.task_list(view, tags, selected_list)
+        except ValueError as error:
+            return _error(str(error))
+        return JsonResponse({"list": selected_list if selected_list is not None else service.list_name,
+                             "tasks": [service._task_json(task) for task in values]})
     body = _body(request)
     if not body or not str(body.get("text", "")).strip():
         return _error("text is required")
-    task = service.add_task(str(body["text"]), body.get("list"))
+    try:
+        task = service.add_task(str(body["text"]), body.get("list"))
+    except ValueError as error:
+        return _error(str(error))
     return JsonResponse({"task": service._task_json(task)}, status=201)
+
+
+@require_http_methods(["GET"])
+def task_lists(request):
+    return JsonResponse({"lists": WebService().task_lists()})
+
+
+@require_http_methods(["GET"])
+def task_tags(request):
+    service = WebService()
+    try:
+        tags = service.task_tags(request.GET.get("list"))
+    except ValueError as error:
+        return _error(str(error))
+    return JsonResponse({"tags": tags})
+
+
+@require_http_methods(["GET"])
+def task_find(request):
+    service = WebService()
+    query = request.GET.get("q", "")
+    try:
+        tasks_found = service.find_tasks(query, request.GET.get("list"))
+    except ValueError as error:
+        return _error(str(error))
+    return JsonResponse({"tasks": [service._task_json(task) for task in tasks_found]})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def task_move(request):
+    service = WebService()
+    body = _body(request)
+    if not body or not isinstance(body.get("ids"), list) or "target" not in body:
+        return _error("ids and target are required")
+    try:
+        moved = service.move_tasks([int(identifier) for identifier in body["ids"]], body["target"], body.get("source"))
+    except (ValueError, KeyError) as error:
+        return _error(str(error))
+    return JsonResponse({"tasks": [service._task_json(task) for task in moved]})
 
 
 @csrf_exempt
@@ -48,7 +97,7 @@ def task_detail(request, task_id):
     service = WebService()
     if request.method == "DELETE":
         try:
-            service.delete_task(task_id)
+            service.delete_task(task_id, request.GET.get("list"))
         except KeyError:
             return _error("task not found", 404)
         return JsonResponse({"deleted": True})
@@ -56,7 +105,7 @@ def task_detail(request, task_id):
     if body is None:
         return _error("invalid JSON")
     try:
-        task = service.update_task(task_id, body)
+        task = service.update_task(task_id, body, request.GET.get("list"))
     except KeyError:
         return _error("task not found", 404)
     return JsonResponse({"task": service._task_json(task)})
@@ -76,6 +125,11 @@ def time_entries(request):
         return _error("text is required")
     entry = service.add_time(str(body["text"]))
     return JsonResponse({"entry": service._time_json(entry)}, status=201)
+
+
+@require_http_methods(["GET"])
+def time_tags(request):
+    return JsonResponse({"tags": WebService().time_tags()})
 
 
 @csrf_exempt
@@ -109,6 +163,11 @@ def spending(request):
         return _error("text is required")
     record = service.add_spending(str(body["text"]))
     return JsonResponse({"record": service._spending_json(record)}, status=201)
+
+
+@require_http_methods(["GET"])
+def spending_tags(request):
+    return JsonResponse({"tags": WebService().spending_tags()})
 
 
 @csrf_exempt

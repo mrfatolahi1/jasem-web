@@ -1,5 +1,4 @@
 import datetime as dt
-import os
 from dataclasses import asdict
 
 from jasem.application.app import previous_window, resolve_window
@@ -34,6 +33,13 @@ class WebService:
     def _task_store(self, name):
         return TaskStore(task_lists.path_for(self.config.task_file, name), name)
 
+    @staticmethod
+    def _normal_list(name):
+        normalized = task_lists.normalize(name)
+        if normalized is None:
+            raise ValueError("invalid task list name")
+        return normalized
+
     def _task_parser(self):
         return TaskParser(get_provider, self.config, self.dates, self.console)
 
@@ -62,7 +68,7 @@ class WebService:
         return value
 
     def task_list(self, view="open", tags=None, list_name=None):
-        store = self._task_store(task_lists.normalize(list_name) or "") if list_name is not None else self.tasks
+        store = self._task_store(self._normal_list(list_name)) if list_name is not None else self.tasks
         tasks = store.load()
         today = dt.date.today().isoformat()
         week = (dt.date.today() + dt.timedelta(days=7)).isoformat()
@@ -81,7 +87,8 @@ class WebService:
         return selected
 
     def add_task(self, text, list_name=None):
-        store = self._task_store(task_lists.normalize(list_name) or "") if list_name is not None else self.tasks
+        selected_name = self._normal_list(list_name) if list_name is not None else self.list_name
+        store = self._task_store(selected_name)
         tasks = store.load()
         task = Task(**self._task_parser().parse(text, dt.date.today()))
         task.id = store.next_id(tasks)
@@ -89,8 +96,9 @@ class WebService:
         store.save(tasks)
         return task
 
-    def update_task(self, task_id, payload):
-        tasks = self.tasks.load()
+    def update_task(self, task_id, payload, list_name=None):
+        store = self._task_store(self._normal_list(list_name)) if list_name is not None else self.tasks
+        tasks = store.load()
         task = next((item for item in tasks if item.id == task_id), None)
         if task is None:
             raise KeyError("task not found")
@@ -106,15 +114,65 @@ class WebService:
         if "deadline" in payload:
             deadline = str(payload["deadline"] or "").strip()
             task.deadline = self.dates.resolve(deadline, dt.date.today()) if deadline else ""
-        self.tasks.save(tasks)
+        store.save(tasks)
         return task
 
-    def delete_task(self, task_id):
-        tasks = self.tasks.load()
+    def delete_task(self, task_id, list_name=None):
+        store = self._task_store(self._normal_list(list_name)) if list_name is not None else self.tasks
+        tasks = store.load()
         kept = [task for task in tasks if task.id != task_id]
         if len(kept) == len(tasks):
             raise KeyError("task not found")
-        self.tasks.save(kept)
+        store.save(kept)
+
+    def task_lists(self):
+        names = [""] + task_lists.discover(self.config.task_file)
+        result = []
+        for name in names:
+            store = self._task_store(name)
+            tasks = store.load()
+            result.append({
+                "name": name,
+                "label": task_lists.label(name),
+                "exists": store.exists(),
+                "open_count": sum(1 for task in tasks if not task.done),
+                "total_count": len(tasks),
+            })
+        return result
+
+    def task_tags(self, list_name=None):
+        counts = {}
+        for task in self.task_list("all", list_name=list_name):
+            for tag in task.tag_list():
+                counts[tag] = counts.get(tag, 0) + 1
+        return [{"tag": tag, "count": count} for tag, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+
+    def find_tasks(self, query, list_name=None):
+        needle = query.strip().lower()
+        if not needle:
+            return []
+        return [task for task in self.task_list("all", list_name=list_name)
+                if needle in task.title.lower() or needle in task.tags.lower()]
+
+    def move_tasks(self, ids, target, source=None):
+        source_name = self._normal_list(source) if source is not None else self.list_name
+        target_name = self._normal_list(target)
+        if source_name == target_name:
+            raise ValueError("source and target lists are the same")
+        source_store = self._task_store(source_name)
+        target_store = self._task_store(target_name)
+        source_tasks = source_store.load()
+        moving = [task for task in source_tasks if task.id in set(ids)]
+        if not moving:
+            raise KeyError("no matching task ids")
+        kept = [task for task in source_tasks if task.id not in set(ids)]
+        destination = target_store.load()
+        for task in moving:
+            task.id = target_store.next_id(destination)
+            destination.append(task)
+        source_store.save(kept)
+        target_store.save(destination)
+        return moving
 
     def time_list(self, period="all", tag=None):
         entries = self.timelog.load()
@@ -122,6 +180,13 @@ class WebService:
         tag_filter = tag or tag_filter
         selected = [e for e in entries if start <= e.date <= end and (not tag_filter or e.tag.lower() == tag_filter.lower())]
         return selected
+
+    def time_tags(self):
+        counts = {}
+        for entry in self.timelog.load():
+            tag = entry.tag or "work"
+            counts[tag] = counts.get(tag, 0) + 1
+        return [{"tag": tag, "count": count} for tag, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
 
     def add_time(self, text):
         fields = self._time_parser().parse(text, dt.date.today())
@@ -163,6 +228,13 @@ class WebService:
         start, end, _, tag_filter = resolve_window([r.date for r in records], [period] if period else [], dt.date.today(), "all")
         tag_filter = tag or tag_filter
         return [r for r in records if start <= r.date <= end and (not tag_filter or r.tag.lower() == tag_filter.lower())]
+
+    def spending_tags(self):
+        counts = {}
+        for record in self.spending_store.load():
+            tag = record.tag or "general"
+            counts[tag] = counts.get(tag, 0) + 1
+        return [{"tag": tag, "count": count} for tag, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
 
     def add_spending(self, text):
         fields = self._spending_parser().parse(text, dt.date.today())
