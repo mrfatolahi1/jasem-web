@@ -1,0 +1,12 @@
+"use client";
+import { useEffect, useState } from "react";
+import { API, BarTrend, Filters, QuickAdd, Shell, Stat } from "../components";
+
+export default function Time() {
+  const [period, setPeriod] = useState("all"); const [entries, setEntries] = useState([]); const [report, setReport] = useState(null); const [parsed, setParsed] = useState(null); const [error, setError] = useState("");
+  async function load() { try { const [list, summary] = await Promise.all([fetch(`${API}/time/?period=${period}`), fetch(`${API}/time/?report=1&period=week`)]); if (!list.ok || !summary.ok) throw new Error("Could not load time"); setEntries((await list.json()).entries); setReport(await summary.json()); } catch (e) { setError(e.message); } }
+  useEffect(() => { load(); }, [period]);
+  async function add(text) { const response = await fetch(`${API}/time/`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})}); if (!response.ok) { setError("Could not add time"); return false; } setParsed((await response.json()).entry); load(); return true; }
+  return <Shell><section className="intro"><div><p className="eyebrow">track · {period}</p><h1>Time</h1><p>Log a block of work in plain language. The report keeps the useful totals close.</p></div></section><QuickAdd placeholder='e.g. 1h 45min debugging the parser yesterday, work' onSubmit={add} parsed={parsed} error={error} /><section className="section"><div className="section-head"><h2>Report · last 7 days</h2><span>{report?.entry_count || 0} entries</span></div>{report && <div className="grid-3"><Stat value={`${report.total_minutes}m`} label="tracked" /><Stat value={`${report.active_days}`} label="active days" /><BarTrend values={report.timeline.map(item => item[1])} /></div>}</section><section className="section"><div className="section-head"><h2>Log</h2><span>{entries.length} entries</span></div><Filters value={period} onChange={setPeriod} items={[["all", "all time"], ["today", "today"], ["week", "week"], ["month", "month"]]} />{entries.length ? entries.slice().reverse().map(entry => <div className="data-row" key={entry.id}><span className="meta">#{entry.id}</span><span>{entry.work}</span><span className="meta">{entry.time_text}</span><span className="tag row-tag">#{entry.tag}</span></div>) : <div className="empty"><strong>No time logged.</strong>Record the first block above.</div>}</section></Shell>;
+}
+

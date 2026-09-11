@@ -1,0 +1,12 @@
+"use client";
+import { useEffect, useState } from "react";
+import { API, BarTrend, Filters, QuickAdd, Shell, Stat } from "../components";
+
+export default function Spending() {
+  const [period, setPeriod] = useState("all"); const [records, setRecords] = useState([]); const [report, setReport] = useState(null); const [parsed, setParsed] = useState(null); const [error, setError] = useState("");
+  async function load() { try { const [list, summary] = await Promise.all([fetch(`${API}/spending/?period=${period}`), fetch(`${API}/spending/?report=1&period=week`)]); if (!list.ok || !summary.ok) throw new Error("Could not load spending"); setRecords((await list.json()).records); setReport(await summary.json()); } catch (e) { setError(e.message); } }
+  useEffect(() => { load(); }, [period]);
+  async function add(text) { const response = await fetch(`${API}/spending/`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})}); if (!response.ok) { setError("Could not record spending"); return false; } setParsed((await response.json()).record); load(); return true; }
+  return <Shell><section className="intro"><div><p className="eyebrow">acc · {period}</p><h1>Spending</h1><p>Record the amount and the reason together. Dates and tags remain searchable in the log.</p></div></section><QuickAdd placeholder='e.g. 50k lunch with the team yesterday, food' onSubmit={add} parsed={parsed} error={error} /><section className="section"><div className="section-head"><h2>Report · last 7 days</h2><span>{report?.record_count || 0} records</span></div>{report && <div className="grid-3"><Stat value={report.total_amount.toLocaleString()} label="spent" /><Stat value={`${report.active_days}`} label="active days" /><BarTrend values={report.timeline.map(item => item[1])} color="gold" /></div>}</section><section className="section"><div className="section-head"><h2>Log</h2><span>{records.length} records</span></div><Filters value={period} onChange={setPeriod} items={[["all", "all time"], ["today", "today"], ["week", "week"], ["month", "month"]]} />{records.length ? records.slice().reverse().map(record => <div className="data-row" key={record.id}><span className="meta">#{record.id} · {record.date}</span><span>{record.title}</span><span className="meta">{record.amount_text}</span><span className="tag row-tag">#{record.tag}</span></div>) : <div className="empty"><strong>No spending recorded.</strong>Record the first expense above.</div>}</section></Shell>;
+}
+
