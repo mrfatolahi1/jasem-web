@@ -133,6 +133,31 @@ class WebService:
         self.timelog.save(entries)
         return entry
 
+    def update_time(self, entry_id, payload):
+        entries = self.timelog.load()
+        entry = next((item for item in entries if item.id == entry_id), None)
+        if entry is None:
+            raise KeyError("time entry not found")
+        if "time_text" in payload or "minutes" in payload:
+            value = payload.get("time_text", payload.get("minutes", ""))
+            minutes = parse_minutes(str(value))
+            entry.time_text = format_minutes(minutes) if minutes > 0 else str(value)
+        if "work" in payload:
+            entry.work = str(payload["work"]).strip()
+        if "tag" in payload:
+            entry.tag = str(payload["tag"]).strip() or "work"
+        if "date" in payload:
+            entry.date = self.dates.resolve(str(payload["date"]), dt.date.today()) or entry.date
+        self.timelog.save(entries)
+        return entry
+
+    def delete_time(self, entry_id):
+        entries = self.timelog.load()
+        kept = [entry for entry in entries if entry.id != entry_id]
+        if len(kept) == len(entries):
+            raise KeyError("time entry not found")
+        self.timelog.save(kept)
+
     def spending_list(self, period="all", tag=None):
         records = self.spending_store.load()
         start, end, _, tag_filter = resolve_window([r.date for r in records], [period] if period else [], dt.date.today(), "all")
@@ -148,6 +173,33 @@ class WebService:
         records.append(record)
         self.spending_store.save(records)
         return record
+
+    def update_spending(self, record_id, payload):
+        records = self.spending_store.load()
+        record = next((item for item in records if item.id == record_id), None)
+        if record is None:
+            raise KeyError("spending record not found")
+        if "amount_text" in payload or "amount" in payload:
+            value = payload.get("amount_text", payload.get("amount", ""))
+            amount = parse_amount(str(value))
+            record.amount_text = format_amount(amount) if amount > 0 else str(value)
+        if "title" in payload:
+            record.title = str(payload["title"]).strip()
+        if "description" in payload:
+            record.description = str(payload["description"]).strip()
+        if "tag" in payload:
+            record.tag = str(payload["tag"]).strip() or "general"
+        if "date" in payload:
+            record.date = self.dates.resolve(str(payload["date"]), dt.date.today()) or record.date
+        self.spending_store.save(records)
+        return record
+
+    def delete_spending(self, record_id):
+        records = self.spending_store.load()
+        kept = [record for record in records if record.id != record_id]
+        if len(kept) == len(records):
+            raise KeyError("spending record not found")
+        self.spending_store.save(kept)
 
     def dashboard(self):
         today = dt.date.today()
@@ -191,4 +243,3 @@ class WebService:
         data = asdict(report)
         data["records"] = [self._spending_json(r) for r in selected]
         return data
-

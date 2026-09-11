@@ -79,6 +79,23 @@ def time_entries(request):
 
 
 @csrf_exempt
+@require_http_methods(["PATCH", "DELETE"])
+def time_detail(request, entry_id):
+    service = WebService()
+    try:
+        if request.method == "DELETE":
+            service.delete_time(entry_id)
+            return JsonResponse({"deleted": True})
+        body = _body(request)
+        if body is None:
+            return _error("invalid JSON")
+        entry = service.update_time(entry_id, body)
+        return JsonResponse({"entry": service._time_json(entry)})
+    except KeyError:
+        return _error("time entry not found", 404)
+
+
+@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def spending(request):
     service = WebService()
@@ -93,3 +110,19 @@ def spending(request):
     record = service.add_spending(str(body["text"]))
     return JsonResponse({"record": service._spending_json(record)}, status=201)
 
+
+@csrf_exempt
+@require_http_methods(["PATCH", "DELETE"])
+def spending_detail(request, record_id):
+    service = WebService()
+    try:
+        if request.method == "DELETE":
+            service.delete_spending(record_id)
+            return JsonResponse({"deleted": True})
+        body = _body(request)
+        if body is None:
+            return _error("invalid JSON")
+        record = service.update_spending(record_id, body)
+        return JsonResponse({"record": service._spending_json(record)})
+    except KeyError:
+        return _error("spending record not found", 404)
