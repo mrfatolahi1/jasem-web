@@ -1,3 +1,5 @@
+![jasem](logo.svg)
+
 # Jasem Web
 
 Jasem Web is a local web companion for the [`jasem`](https://github.com/mrfatolahi1/Jasem) CLI. It reads and writes the same human-readable Markdown files under `~/.jasem/`, so changes made in the web app are immediately visible to the CLI and vice versa.
