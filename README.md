@@ -13,11 +13,16 @@ frontend/  Static landing page (index.html)
 
 ## What it supports
 
+Every `jasem` command has an endpoint, and each one is documented against the
+command it performs in [`backend/openapi.yaml`](backend/openapi.yaml).
+
 - Dashboard focus view with today's tracked time and spending.
 - Tasks with natural-language capture, deadlines, priorities, tags, completion, editing, deletion, search, filters, and named lists.
+- Bulk completion and deletion, as `jasem todo done 3 5` and `jasem todo rm 3 5` do.
 - Moving tasks between lists such as `@work-backlog` and `@work-ongoing`.
 - Time tracking with natural-language capture, period/tag filters, editing, deletion, and jasem reports.
 - Spending records with natural-language capture, period/tag filters, editing, deletion, and jasem reports.
+- The command reference, resolved configuration, and version screens jasem prints.
 - Jalali/Gregorian behavior and AI provider configuration through jasem's existing package and environment variables.
 
 ## Quick start
@@ -32,7 +37,8 @@ pip install -r requirements.txt
 python manage.py runserver 127.0.0.1:8000
 ```
 
-The API is then served at <http://127.0.0.1:8000/api/>. `frontend/index.html` is a
+The API is then served at <http://127.0.0.1:8000/api/>, with interactive
+documentation at <http://127.0.0.1:8000/api/docs/>. `frontend/index.html` is a
 static landing page; open it directly in a browser.
 
 ## Data and configuration
@@ -55,7 +61,8 @@ cd backend
 .venv/bin/python manage.py check
 ```
 
-The backend can also be checked without changing real data by setting `JASEM_DIR` to a temporary directory.
+Set `JASEM_DIR` to a temporary directory to exercise the API without touching
+real data.
 
 See [backend/README.md](backend/README.md) for application-specific details.
 
