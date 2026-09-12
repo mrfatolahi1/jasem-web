@@ -1,4 +1,4 @@
-![jasem web](logo.svg)
+![jasem](logo.svg)
 
 # Jasem Web
 
