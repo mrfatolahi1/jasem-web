@@ -47,6 +47,19 @@ tags:
 
 paths:
 
+  /api/:
+    get:
+      tags: [Meta]
+      summary: API index
+      description: The service identity, links to the documentation, and every route served.
+      operationId: index
+      responses:
+        "200":
+          description: What this server offers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Index" }
+
   /api/health/:
     get:
       tags: [Meta]
@@ -1081,6 +1094,22 @@ components:
       properties:
         name: { type: string, example: work }
         label: { type: string, example: "@work" }
+
+    Index:
+      type: object
+      properties:
+        service: { type: string, example: jasem-web }
+        jasem_version: { type: string, example: 1.2.0 }
+        docs:
+          type: object
+          properties:
+            swagger: { type: string, example: /api/docs/ }
+            openapi: { type: string, example: /api/openapi.yaml }
+            commands: { type: string, example: /api/help/ }
+        endpoints:
+          type: array
+          description: Every route the server has, read from its URL map.
+          items: { type: string }
 
     Meta:
       type: object

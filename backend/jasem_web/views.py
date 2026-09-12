@@ -93,6 +93,22 @@ def _tags(request):
 # --------------------------------------------------------------- meta & docs
 
 @require_http_methods(["GET"])
+def index(request):
+    """Answer the base URL with the service identity and every route it serves."""
+    from django.urls import get_resolver
+    return JsonResponse({
+        "service": "jasem-web",
+        "jasem_version": WebService.version(),
+        "docs": {
+            "swagger": "/api/docs/",
+            "openapi": OPENAPI_PATH,
+            "commands": "/api/help/",
+        },
+        "endpoints": sorted("/" + str(entry.pattern) for entry in get_resolver().url_patterns),
+    })
+
+
+@require_http_methods(["GET"])
 def health(request):
     """Report that the server is up."""
     return JsonResponse({"ok": True, "service": "jasem-web"})
