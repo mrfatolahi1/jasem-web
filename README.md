@@ -24,8 +24,7 @@ python manage.py runserver 127.0.0.1:8000
 ```
 
 Landing page at <http://127.0.0.1:8000/>, API at <http://127.0.0.1:8000/api/>,
-docs at <http://127.0.0.1:8000/api/docs/>. Check with
-`.venv/bin/python manage.py check`.
+docs at <http://127.0.0.1:8000/api/docs/>.
 
 ## Data
 
