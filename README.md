@@ -6,7 +6,7 @@ The project has two independent applications:
 
 ```text
 backend/   Django JSON API; no models, ORM, migrations, or database
-frontend/  Next.js App Router UI
+frontend/  Static landing page (index.html)
 ```
 
 ## What it supports
@@ -20,9 +20,7 @@ frontend/  Next.js App Router UI
 
 ## Quick start
 
-Use two terminals from the project root.
-
-Terminal 1:
+From the project root:
 
 ```sh
 cd backend
@@ -32,15 +30,8 @@ pip install -r requirements.txt
 python manage.py runserver 127.0.0.1:8000
 ```
 
-Terminal 2:
-
-```sh
-cd frontend
-npm install
-npm run dev
-```
-
-Open <http://localhost:3000>. Next.js proxies `/api` requests to Django at `127.0.0.1:8000`.
+The API is then served at <http://127.0.0.1:8000/api/>. `frontend/index.html` is a
+static landing page; open it directly in a browser.
 
 ## Data and configuration
 
@@ -62,12 +53,7 @@ cd backend
 .venv/bin/python manage.py check
 ```
 
-```sh
-cd frontend
-npm run build
-```
-
 The backend can also be checked without changing real data by setting `JASEM_DIR` to a temporary directory.
 
-See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md) for application-specific details.
+See [backend/README.md](backend/README.md) for application-specific details.
 
