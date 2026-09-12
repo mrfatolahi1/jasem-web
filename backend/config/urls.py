@@ -5,6 +5,8 @@ from django.urls import path
 from jasem_web import views
 
 urlpatterns = [
+    path("", views.landing),
+
     path("api/", views.index),
     path("api/health/", views.health),
     path("api/meta/", views.meta),

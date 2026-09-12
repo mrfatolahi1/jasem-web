@@ -33,6 +33,8 @@ Responses are JSON and every path ends in `/` (`APPEND_SLASH` is off).
 
 `?list=` picks a task list, `?view=` a task filter, `?period=` and `?tag=` a window.
 
+`/` serves `frontend/index.html`; set `JASEM_WEB_FRONTEND` if it lives elsewhere.
+
 ## CLI behavior the API keeps
 
 Field aliases (`p`, `due`, `c`, `t`, `a`, `notes`) and clearing words (`none`,

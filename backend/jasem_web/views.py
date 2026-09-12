@@ -5,12 +5,20 @@ encode the result. Every rule about what jasem accepts lives in the service.
 """
 
 import json
+import os
+from pathlib import Path
 
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .services import ApiError, WebService
+
+FRONTEND_DIR = Path(os.environ.get(
+    "JASEM_WEB_FRONTEND",
+    Path(__file__).resolve().parent.parent.parent / "frontend",
+))
+"""Where the static landing page lives; override it when it ships elsewhere."""
 
 OPENAPI_PATH = "/api/openapi.yaml"
 """Where the specification is served, for the docs page to load."""
@@ -93,6 +101,17 @@ def _tags(request):
 # --------------------------------------------------------------- meta & docs
 
 @require_http_methods(["GET"])
+def landing(request):
+    """Serve the static landing page at the site root."""
+    page = FRONTEND_DIR / "index.html"
+    if not page.is_file():
+        return JsonResponse(
+            {"error": f"no landing page at {page}", "api": "/api/"}, status=404)
+    return HttpResponse(page.read_text(encoding="utf-8"),
+                        content_type="text/html; charset=utf-8")
+
+
+@require_http_methods(["GET"])
 def index(request):
     """Answer the base URL with the service identity and every route it serves."""
     from django.urls import get_resolver
@@ -138,7 +157,6 @@ def configuration(request):
 @require_http_methods(["GET"])
 def openapi(request):
     """Serve the OpenAPI specification kept beside the code."""
-    from pathlib import Path
     spec = Path(__file__).resolve().parent.parent / "openapi.yaml"
     return HttpResponse(spec.read_text(encoding="utf-8"), content_type="application/yaml")
 

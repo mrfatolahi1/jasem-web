@@ -23,8 +23,8 @@ pip install -r requirements.txt
 python manage.py runserver 127.0.0.1:8000
 ```
 
-API at <http://127.0.0.1:8000/api/>, docs at <http://127.0.0.1:8000/api/docs/>.
-Open `frontend/index.html` directly in a browser. Check with
+Landing page at <http://127.0.0.1:8000/>, API at <http://127.0.0.1:8000/api/>,
+docs at <http://127.0.0.1:8000/api/docs/>. Check with
 `.venv/bin/python manage.py check`.
 
 ## Data
