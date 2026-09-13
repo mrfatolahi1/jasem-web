@@ -16,7 +16,7 @@ from .services import ApiError, WebService
 
 FRONTEND_DIR = Path(os.environ.get(
     "JASEM_WEB_FRONTEND",
-    Path(__file__).resolve().parent.parent.parent / "frontend",
+    Path(__file__).resolve().parent.parent.parent / "docs",
 ))
 """Where the static landing page lives; override it when it ships elsewhere."""
 

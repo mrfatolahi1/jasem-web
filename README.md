@@ -8,7 +8,7 @@ here are visible to the CLI immediately, and vice versa.
 
 ```text
 backend/   Django JSON API; no models, ORM, migrations, or database
-frontend/  Static landing page (index.html)
+docs/      Landing page for the jasem CLI (index.html), served by GitHub Pages
 ```
 
 Every `jasem` command has an endpoint — see [backend/README.md](backend/README.md).
