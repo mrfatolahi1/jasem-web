@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>jasem — plain-text life admin</title>
-<meta name="description" content="Tasks, time, and spending, kept as markdown files you own. A local companion for the jasem CLI.">
+<title>jasem — tasks, time &amp; spending in your terminal</title>
+<meta name="description" content="jasem is a plain-text task manager, time tracker, and spending log for your terminal. Write naturally; your data stays in Markdown files you own.">
 <meta name="theme-color" content="#0A0806">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.min.js" crossorigin>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='2' height='2' fill='%23E07B39'/%3E%3Crect x='2' width='2' height='2' fill='%235A6DA8'/%3E%3Crect y='2' width='2' height='2' fill='%23D8A657'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%23C44E3B'/%3E%3C/svg%3E">
 <style>
   :root {
-    /* Surfaces — warm paper, deliberately light. */
-    --paper: #FAF6F0;
-    --card: #FFFDFA;
-    --line: #EBE1D4;
-    --ink: #241F1A;
-    --muted: #6A6058;
+    /* A dark room lit from above: light type on near-black. */
+    --room: #0A0806;
+    --text: #F2E9DD;
+    --muted: #B3A698;
+    --line: rgba(242, 233, 221, 0.12);
+    --panel: rgba(16, 13, 10, 0.78);
 
     /* Logo palette. Decorative use only, except where contrast is verified. */
     --orange: #E07B39;
@@ -25,28 +25,29 @@
     --gold: #D8A657;
     --blue: #5A6DA8;
 
-    /* Verified against --paper / white at 4.5:1 or better. */
-    --link: #B4501A;
+    /* Verified at 4.5:1 or better: --muted and --link on --room, white on --cta. */
+    --link: #F2A366;
     --cta: #BD5616;
 
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-    --s1: 8px; --s2: 16px; --s3: 24px; --s4: 40px; --s5: 64px; --s6: 96px; --s7: 128px;
+    --s1: 8px; --s2: 16px; --s3: 24px; --s4: 40px; --s5: 64px; --s6: 96px;
     --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   }
 
   * { box-sizing: border-box; }
 
   html {
-    color-scheme: light;
+    color-scheme: dark;
+    background: var(--room);
     scroll-behavior: smooth;
+    scroll-snap-type: y mandatory;   /* touch and keys move one page at a time; the wheel is paged in script */
   }
 
   body {
     margin: 0;
-    background: var(--paper);
-    color: var(--ink);
+    color: var(--text);
     font-family: var(--sans);
     font-size: 17px;
     line-height: 1.65;
@@ -56,35 +57,51 @@
 
   a { color: var(--link); }
 
+  code { font-family: var(--mono); font-size: 0.9em; }
+
   :focus-visible {
-    outline: 2px solid var(--cta);
+    outline: 2px solid var(--link);
     outline-offset: 3px;
     border-radius: 4px;
   }
 
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 var(--s3); }
+  .wrap { width: 100%; max-width: 760px; margin: 0 auto; padding: 0 var(--s3); }
 
-  /* ============================================================
-     PAGE 1 — the floor: painted wooden cubes on slate, lit from the top
-     ============================================================ */
+  .wrap.wide { max-width: 960px; }
 
-  /* Sticky, so page 2 slides over it like a curtain. */
-  .pit {
-    --pit: #0A0806;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    height: 100svh;
+  .wide .term { max-width: 712px; margin-inline: auto; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
     overflow: hidden;
-    isolation: isolate;
-    background:
-      radial-gradient(55% 50% at 50% 42%, rgba(255, 196, 92, 0.09), transparent 72%),
-      var(--pit);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
-  .pit.covered { visibility: hidden; }
+  /* ============================================================
+     THE ROOM — one floor of cubes under all three pages, lit from
+     beyond the top of page 1; scrolling walks down it
+     ============================================================ */
 
-  .pit canvas {
+  .scene {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100lvh;   /* the tallest the viewport gets, so a phone's hiding toolbar never resizes it */
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background:
+      radial-gradient(55% 50% at 50% 42%, rgba(255, 196, 92, 0.09), transparent 72%),
+      var(--room);
+  }
+
+  .scene canvas {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -94,222 +111,81 @@
     transition: opacity 1.4s var(--ease);
   }
 
-  .pit.ready canvas { opacity: 1; }
+  .scene.ready canvas { opacity: 1; }
 
-  /* A soft haze spilling in from the light beyond the top edge. */
-  .pit-light {
+  /* A soft haze from the light beyond page 1's top edge, gone once you walk away from it. */
+  .scene-light {
     position: absolute;
     inset: 0;
-    z-index: 1;
-    pointer-events: none;
     mix-blend-mode: screen;
+    opacity: calc(1 - var(--depth, 0));
     background: radial-gradient(60% 40% at 50% -6%, rgba(255, 214, 130, 0.16), transparent 78%);
   }
 
-  /* The dark closing in at the edges, and deepening as page 2 covers it. */
-  .pit::before,
-  .pit::after {
+  /* The dark closing in at the edges. */
+  .scene::after {
     content: "";
     position: absolute;
     inset: 0;
-    pointer-events: none;
-  }
-
-  .pit::before {
-    z-index: 2;
     background:
       radial-gradient(110% 100% at 50% 10%, transparent 42%, rgba(5, 4, 3, 0.85) 100%),
       linear-gradient(to top, rgba(5, 4, 3, 0.8), transparent 30%);
   }
 
-  .pit::after {
-    z-index: 4;
-    background: #050403;
-    opacity: calc(var(--cover, 0) * 0.9);
-  }
-
-  .scroll-cue.on-dark {
-    z-index: 3;
-    color: rgba(246, 232, 210, 0.72);
-    text-shadow: 0 1px 14px rgba(0, 0, 0, 0.9);
-  }
-
   /* ============================================================
-     PAGE 2 — the calm: logo, light ground, cubes drifting
+     PAGES — each fills the screen, words in the middle
      ============================================================ */
 
-  .hero {
+  .page {
     position: relative;
     z-index: 1;
+    min-height: 100vh;
     min-height: 100svh;
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
-    padding: var(--s6) var(--s3) var(--s7);
-    overflow: hidden;
-    isolation: isolate;
-    background: var(--paper);
-    box-shadow: 0 -28px 80px rgba(0, 0, 0, 0.45);
+    padding-block: var(--s5);
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    text-shadow: 0 1px 18px rgba(0, 0, 0, 0.6);
   }
 
-  /* The wordmark waits for page 2 to arrive before it assembles. */
-  .js .hero:not(.in) .hero-inner,
-  .js .hero:not(.in) .logo rect { animation-play-state: paused; }
+  .head { text-align: center; }
 
-  /* Soft colour washes pulled from the logo — the whole mood sits here. */
-  .hero::before {
-    content: "";
-    position: absolute;
-    inset: -20%;
-    z-index: -2;
-    background:
-      radial-gradient(42% 38% at 16% 22%, rgba(224, 123, 57, 0.11), transparent 70%),
-      radial-gradient(38% 34% at 84% 26%, rgba(90, 109, 168, 0.09), transparent 70%),
-      radial-gradient(46% 40% at 72% 82%, rgba(138, 75, 107, 0.08), transparent 72%),
-      radial-gradient(40% 36% at 22% 78%, rgba(216, 166, 87, 0.10), transparent 70%);
-  }
-
-  /* Melts the colour wash into the flat paper of phase 2. */
-  .hero::after {
-    content: "";
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    height: 200px;
-    z-index: -1;
-    pointer-events: none;
-    background: linear-gradient(to bottom, rgba(250, 246, 240, 0), var(--paper));
-  }
-
-  .cubes {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    perspective: 1200px;
-    pointer-events: none;
-  }
-
-  .cube {
-    position: absolute;
-    left: var(--x);
-    top: var(--y);
-    width: var(--s);
-    height: var(--s);
-    transform-style: preserve-3d;
-    animation: drift var(--d) var(--ease) infinite alternate;
-    animation-delay: var(--delay, 0s);
-  }
-
-  /* Resting positions; the breakpoint below re-places them. */
-  .cube:nth-child(1)  { --x: 5%; --y: 14%; }
-  .cube:nth-child(2)  { --x: 84%; --y: 11%; }
-  .cube:nth-child(3)  { --x: 10%; --y: 66%; }
-  .cube:nth-child(4)  { --x: 79%; --y: 70%; }
-  .cube:nth-child(5)  { --x: 4%; --y: 42%; }
-  .cube:nth-child(6)  { --x: 89%; --y: 48%; }
-  .cube:nth-child(7)  { --x: 25%; --y: 30%; }
-  .cube:nth-child(8)  { --x: 75%; --y: 34%; }
-  .cube:nth-child(9)  { --x: 33%; --y: 85%; }
-  .cube:nth-child(10)  { --x: 63%; --y: 88%; }
-  .cube:nth-child(11)  { --x: 48%; --y: 5%; }
-  .cube:nth-child(12)  { --x: 92%; --y: 80%; }
-
-  .cube .spin {
-    position: absolute;
-    inset: 0;
-    transform-style: preserve-3d;
-    animation: tumble var(--r) linear infinite;
-    animation-delay: var(--delay, 0s);
-  }
-
-  .cube .spin span {
-    position: absolute;
-    width: var(--s);
-    height: var(--s);
-    background: var(--c);
-    border-radius: 3px;
-  }
-
-  /* Six faces, shaded so the form reads as solid rather than flat. */
-  .cube span:nth-child(1) { transform: translateZ(calc(var(--s) / 2)); }
-  .cube span:nth-child(2) { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); filter: brightness(0.78); }
-  .cube span:nth-child(3) { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); filter: brightness(0.88); }
-  .cube span:nth-child(4) { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); filter: brightness(0.93); }
-  .cube span:nth-child(5) { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); filter: brightness(1.1); }
-  .cube span:nth-child(6) { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); filter: brightness(0.72); }
-
-  /* Depth of field: distant cubes sit back, softer and paler. */
-  .cube.far { opacity: 0.3; filter: blur(2px); }
-  .cube.mid { opacity: 0.42; filter: blur(0.6px); }
-  .cube.near { opacity: 0.55; }
-
-  @keyframes drift {
-    from { transform: translate3d(0, 0, 0); }
-    to   { transform: translate3d(var(--dx), var(--dy), 0); }
-  }
-
-  @keyframes tumble {
-    from { transform: rotateX(0deg) rotateY(0deg); }
-    to   { transform: rotateX(360deg) rotateY(360deg); }
-  }
-
-  .hero-inner {
-    position: relative;
-    text-align: center;
-    max-width: 620px;
-    animation: settle 1.1s var(--ease) both;
-  }
-
-  @keyframes settle {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: none; }
-  }
-
-  .logo {
-    width: min(520px, 82vw);
-    height: auto;
-    display: block;
-    margin: 0 auto;
-  }
-
-  /* The wordmark assembles itself, one band of tiles at a time. */
-  .logo rect { animation: tile 0.62s var(--ease) both; }
-  .logo rect:nth-of-type(6n + 1) { animation-delay: 0.05s; }
-  .logo rect:nth-of-type(6n + 2) { animation-delay: 0.13s; }
-  .logo rect:nth-of-type(6n + 3) { animation-delay: 0.21s; }
-  .logo rect:nth-of-type(6n + 4) { animation-delay: 0.29s; }
-  .logo rect:nth-of-type(6n + 5) { animation-delay: 0.37s; }
-  .logo rect:nth-of-type(6n + 6) { animation-delay: 0.45s; }
-
-  @keyframes tile {
-    from { opacity: 0; transform: translateY(-6px) scale(0.8); }
-    to   { opacity: 1; transform: none; }
-  }
-
-  .tagline {
+  .eyebrow {
     font-family: var(--mono);
-    font-size: 13px;
-    letter-spacing: 0.22em;
-    text-transform: lowercase;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
     color: var(--muted);
-    margin: var(--s3) 0 0;
+    margin: 0 0 var(--s2);
   }
 
-  .hero-lede {
-    font-size: clamp(18px, 2.4vw, 21px);
-    line-height: 1.55;
-    color: var(--ink);
-    margin: var(--s3) auto 0;
-    max-width: 30em;
+  .lead {
+    font-size: clamp(26px, 3.6vw, 38px);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0;
     text-wrap: balance;
   }
 
-  .hero-cta {
+  .body {
+    color: var(--muted);
+    margin: var(--s3) auto 0;
+    max-width: 34em;
+    text-wrap: balance;
+  }
+
+  .cta {
     display: flex;
     flex-wrap: wrap;
     gap: var(--s2);
     justify-content: center;
+    align-items: center;
     margin-top: var(--s4);
+    text-shadow: none;
   }
 
   .btn {
@@ -318,29 +194,182 @@
     min-height: 46px;
     padding: 0 22px;
     border-radius: 10px;
-    border: 1px solid var(--line);
-    background: var(--card);
-    color: var(--ink);
+    border: 1px solid rgba(242, 233, 221, 0.24);
+    background: var(--panel);
+    color: var(--text);
     font-size: 16px;
     font-weight: 500;
     text-decoration: none;
-    cursor: pointer;
     transition: border-color 0.22s var(--ease), transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
   }
 
-  .btn:hover {
-    border-color: #D6C6B2;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 22px rgba(36, 31, 26, 0.07);
+  .btn:hover { border-color: rgba(242, 233, 221, 0.45); transform: translateY(-2px); }
+
+  .btn.primary { background: var(--cta); border-color: var(--cta); color: #FFFFFF; }
+
+  .btn.primary:hover { box-shadow: 0 10px 26px rgba(189, 86, 22, 0.35); }
+
+  /* The install line: a command you can copy in one click. */
+  .install {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 46px;
+    padding: 0 6px 0 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(242, 233, 221, 0.24);
+    background: rgba(8, 7, 5, 0.9);
+    font-family: var(--mono);
+    font-size: 14px;
   }
 
-  .btn.primary {
-    background: var(--cta);
-    border-color: var(--cta);
-    color: #FFFFFF;
+  .install .prompt { color: var(--orange); }
+
+  .copy {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 7px;
+    background: rgba(242, 233, 221, 0.08);
+    color: var(--muted);
+    font: 500 13px var(--sans);
+    cursor: pointer;
   }
 
-  .btn.primary:hover { box-shadow: 0 10px 26px rgba(189, 86, 22, 0.26); }
+  .copy:hover { background: rgba(242, 233, 221, 0.14); color: var(--text); }
+
+  /* ---------- Terminal windows, showing real jasem output ---------- */
+
+  .term {
+    margin-top: var(--s4);
+    border: 1px solid rgba(242, 233, 221, 0.14);
+    border-radius: 12px;
+    background: rgba(8, 7, 5, 0.92);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    text-align: left;
+    text-shadow: none;
+    overflow: hidden;
+  }
+
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: rgba(242, 233, 221, 0.16); }
+
+  .term-bar span {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: rgba(179, 166, 152, 0.7);
+  }
+
+  .term pre {
+    margin: 0;
+    padding: var(--s2) 20px 18px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.55;
+    color: #D9CFC3;
+    tab-size: 4;
+  }
+
+  /* Colour the way a terminal would, from the logo's palette. */
+  .term .p { color: var(--orange); user-select: none; }   /* prompt */
+  .term .c { color: #F4ECE2; }                           /* command */
+  .term .s { color: var(--gold); }                       /* quoted text */
+  .term .ok { color: #9CC28A; }                          /* ✓ */
+  .term .t { color: #8FA0D8; }                           /* #tags */
+  .term .d { color: rgba(179, 166, 152, 0.55); }          /* rules and dim notes */
+  .term .hi { color: #E8795F; }                          /* high priority */
+  .term .bar { color: var(--orange); }
+
+  /* Tabs across the review terminal: tasks · time · spending. */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px 0;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 8px 12px 9px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--muted);
+    font: 500 13px var(--mono);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .tab:hover { color: var(--text); }
+
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--orange); }
+
+  /* Every panel keeps the tallest one's height, so switching never shifts the page. */
+  .panels { display: grid; }
+  .panels > pre { grid-area: 1 / 1; }
+  .panels > pre[hidden] { display: block !important; visibility: hidden; }
+
+  .features {
+    list-style: none;
+    margin: var(--s4) 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--s3);
+    text-align: left;
+  }
+
+  .features li {
+    position: relative;
+    padding-left: var(--s3);
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+
+  .features strong { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+
+  .features code { color: var(--text); font-size: 0.86em; }
+
+  .features li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--tile, var(--orange));
+  }
+
+  /* The last page keeps its words centred and its footer at the foot. */
+  .page:last-of-type > .reveal { margin-block: auto; }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1) var(--s3);
+    justify-content: space-between;
+    margin-top: var(--s4);
+    padding-top: var(--s3);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .foot p { margin: 0; }
+
+  .foot a + a { margin-left: var(--s3); }
 
   .scroll-cue {
     position: absolute;
@@ -355,7 +384,7 @@
     font-size: 11px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: rgba(246, 232, 210, 0.72);
     text-decoration: none;
     padding: var(--s1);
   }
@@ -367,197 +396,47 @@
     50%      { transform: translateY(5px); opacity: 1; }
   }
 
-  /* ============================================================
-     PAGE 3 ONWARD — the substance: words and data
-     ============================================================ */
-
-  main { position: relative; z-index: 1; background: var(--paper); }
-
-  section.block { padding-block: var(--s6); }
-
-  h2 {
-    font-family: var(--mono);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 var(--s1);
-  }
-
-  .lead {
-    font-size: clamp(22px, 3vw, 28px);
-    line-height: 1.35;
-    font-weight: 600;
-    letter-spacing: -0.015em;
-    margin: 0 0 var(--s3);
-    text-wrap: balance;
-  }
-
-  .body { color: var(--muted); margin: 0; max-width: 34em; }
-
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--s2);
-    margin-top: var(--s4);
-  }
-
-  .card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: var(--s3);
-    transition: transform 0.24s var(--ease), box-shadow 0.24s var(--ease);
-  }
-
-  .card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 28px rgba(36, 31, 26, 0.06);
-  }
-
-  .card .mark { display: block; margin-bottom: 14px; }
-
-  .card h3 { font-size: 17px; margin: 0 0 4px; }
-
-  .card p { margin: 0; font-size: 15px; color: var(--muted); line-height: 1.55; }
-
-  /* Data */
-  .files {
-    list-style: none;
-    margin: var(--s4) 0 0;
-    padding: 0;
-    display: grid;
-    gap: 1px;
-    background: var(--line);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-
-  .files li {
-    background: var(--card);
-    padding: 14px var(--s3);
-    display: flex;
-    align-items: baseline;
-    gap: var(--s2);
-    flex-wrap: wrap;
-  }
-
-  .files code {
-    font-family: var(--mono);
-    font-size: 14px;
-    color: var(--ink);
-  }
-
-  .files span { font-size: 14.5px; color: var(--muted); }
-
-  .files .dot {
-    width: 9px; height: 9px; border-radius: 2px;
-    align-self: center; flex: none;
-  }
-
-  figure { margin: var(--s3) 0 0; }
-
-  figcaption {
-    font-size: 13.5px;
-    color: var(--muted);
-    margin-top: 10px;
-  }
-
-  pre {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: var(--s3);
-    overflow-x: auto;
-    font-family: var(--mono);
-    font-size: 13px;
-    line-height: 1.75;
-    margin: 0;
-    color: var(--ink);
-  }
-
-  /* A table must keep its columns aligned, so it never wraps. */
-  pre.table { white-space: pre; font-size: 12.5px; }
-
-  .facts { list-style: none; margin: var(--s4) 0 0; padding: 0; }
-
-  .facts li {
-    position: relative;
-    padding: 12px 0 12px var(--s3);
-    border-bottom: 1px solid var(--line);
-    color: var(--muted);
-  }
-
-  .facts li:first-child { border-top: 1px solid var(--line); }
-
-  .facts li strong { color: var(--ink); font-weight: 600; }
-
-  .facts li::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 22px;
-    width: 8px; height: 8px;
-    border-radius: 2px;
-    background: var(--tile, var(--orange));
-  }
-
-  footer {
-    border-top: 1px solid var(--line);
-    padding-block: var(--s4) var(--s5);
-    color: var(--muted);
-    font-size: 14.5px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--s1) var(--s3);
-    justify-content: space-between;
-  }
-
-  footer p { margin: 0; }
-
-  /* Scroll reveal — only armed when JS runs, so no-JS reads normally. */
+  /* Words settle in as their page arrives — only armed when JS runs. */
   .js .reveal { opacity: 0; transform: translateY(14px); }
 
   .js .reveal.in {
     opacity: 1;
     transform: none;
-    transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+    transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
   }
-
-  .js .reveal.in .card:nth-child(2) { transition-delay: 0.08s; }
-  .js .reveal.in .card:nth-child(3) { transition-delay: 0.16s; }
 
   /* ---------- Responsive ---------- */
 
   @media (max-width: 900px) {
-    .cube.inner { display: none; }
+    .features { grid-template-columns: repeat(2, 1fr); }
   }
 
   @media (max-width: 720px) {
-    /* A phone's content spans the full width, so the only safe bands are
-       above the wordmark and below the call to action. */
-    .cube:nth-child(1)  { --x: -2%; --y: 4%; }
-    .cube:nth-child(2)  { --x: 78%; --y: 2%; }
-    .cube:nth-child(3)  { --x: 4%;  --y: 88%; }
-    .cube:nth-child(4)  { --x: 74%; --y: 90%; }
-    .cube:nth-child(5)  { --x: 40%; --y: -1%; }
-    .cube:nth-child(6)  { --x: 88%; --y: 14%; }
-    .cube:nth-child(12) { --x: -4%; --y: 16%; }
-
     body { font-size: 16px; }
-    section.block { padding-block: var(--s5); }
-    .cards { grid-template-columns: 1fr; }
-    .hero { padding: var(--s5) var(--s3) var(--s6); }
-    .cube { transform: scale(0.62); }
-    pre:not(.table) { white-space: pre-wrap; word-break: break-word; }
+    .term { margin-top: var(--s3); }
+    /* jasem's output is 76 columns: on a phone it scrolls sideways, faded at the edge to say so. */
+    .term pre {
+      font-size: 11px;
+      padding: 12px 14px 14px;
+      -webkit-mask-image: linear-gradient(to right, #000 88%, transparent);
+      mask-image: linear-gradient(to right, #000 88%, transparent);
+    }
+    .eyebrow { letter-spacing: 0.1em; }
+    .features { grid-template-columns: 1fr; gap: 12px; margin-top: var(--s3); }
+    .cta { margin-top: var(--s3); }
+  }
+
+  @media (max-height: 760px) {
+    .page { padding-block: var(--s4); }
+    .term, .features, .cta { margin-top: var(--s3); }
+    .term pre { line-height: 1.5; }
   }
 
   /* ---------- Motion preferences ---------- */
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    .cube, .cube .spin, .scroll-cue svg, .logo rect, .hero-inner { animation: none !important; }
+    .scroll-cue svg { animation: none; }
     .js .reveal { opacity: 1; transform: none; }
     * { transition-duration: 0.01ms !important; }
   }
@@ -567,240 +446,218 @@
 
 <script>document.documentElement.classList.add("js");</script>
 
-<!-- ========== PAGE 1 ========== -->
-<div class="pit">
-  <canvas aria-hidden="true"></canvas>
-  <div class="pit-light" aria-hidden="true"></div>
-  <a class="scroll-cue on-dark" href="#intro">
-    <span>scroll</span>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
-  </a>
+<!-- The room: one floor of cubes under all three pages. -->
+<div class="scene" aria-hidden="true">
+  <canvas></canvas>
+  <div class="scene-light"></div>
 </div>
 
-<!-- ========== PAGE 2 ========== -->
-<header class="hero" id="intro">
-
-  <div class="cubes" aria-hidden="true">
-    <div class="cube far"  style="--s:76px; --c:var(--orange); --d:22s; --r:58s; --dx:26px; --dy:-34px; "><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube mid"  style="--s:52px; --c:var(--blue);   --d:19s; --r:47s; --dx:-22px;--dy:28px;  --delay:-4s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube mid" style="--s:70px; --c:var(--gold);   --d:26s; --r:64s; --dx:18px; --dy:-26px; --delay:-9s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube mid"  style="--s:62px; --c:var(--plum);   --d:23s; --r:55s; --dx:-28px;--dy:-20px; --delay:-2s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube far"  style="--s:44px; --c:var(--red);    --d:20s; --r:50s; --dx:20px; --dy:30px;  --delay:-11s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube far"  style="--s:40px; --c:var(--red);    --d:24s; --r:61s; --dx:-18px;--dy:-24px; --delay:-6s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube mid inner"  style="--s:34px; --c:var(--blue); --d:18s; --r:44s; --dx:16px; --dy:24px;  --delay:-7s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube far inner"  style="--s:38px; --c:var(--orange); --d:21s; --r:53s; --dx:-20px;--dy:22px; --delay:-13s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube mid inner"  style="--s:30px; --c:var(--gold); --d:17s; --r:41s; --dx:22px; --dy:-18px; --delay:-3s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube far inner"  style="--s:28px; --c:var(--plum); --d:25s; --r:57s; --dx:-16px;--dy:-22px; --delay:-15s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube far inner"  style="--s:32px; --c:var(--blue); --d:22s; --r:49s; --dx:18px; --dy:20px;  --delay:-8s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-    <div class="cube mid"  style="--s:46px; --c:var(--gold);   --d:20s; --r:52s; --dx:-24px;--dy:18px;  --delay:-5s;"><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
-  </div>
-
-  <div class="hero-inner">
-    <svg class="logo" viewBox="0 0 444 156" role="img" aria-label="jasem" preserveAspectRatio="xMidYMid meet">
-      <title>jasem</title>
-      <rect x="42" y="24" width="18" height="18" fill="#E07B39"/>
-      <rect x="60" y="24" width="18" height="18" fill="#C44E3B"/>
-      <rect x="78" y="24" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="78" y="42" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="114" y="24" width="18" height="18" fill="#D8A657"/>
-      <rect x="114" y="42" width="18" height="18" fill="#D8A657"/>
-      <rect x="132" y="24" width="18" height="18" fill="#E07B39"/>
-      <rect x="150" y="24" width="18" height="18" fill="#C44E3B"/>
-      <rect x="150" y="42" width="18" height="18" fill="#C44E3B"/>
-      <rect x="186" y="24" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="186" y="42" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="204" y="24" width="18" height="18" fill="#D8A657"/>
-      <rect x="222" y="24" width="18" height="18" fill="#E07B39"/>
-      <rect x="258" y="24" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="258" y="42" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="276" y="24" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="294" y="24" width="18" height="18" fill="#D8A657"/>
-      <rect x="330" y="24" width="18" height="18" fill="#C44E3B"/>
-      <rect x="330" y="42" width="18" height="18" fill="#C44E3B"/>
-      <rect x="348" y="24" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="366" y="24" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="366" y="42" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="384" y="24" width="18" height="18" fill="#D8A657"/>
-      <rect x="402" y="24" width="18" height="18" fill="#E07B39"/>
-      <rect x="402" y="42" width="18" height="18" fill="#E07B39"/>
-      <rect x="42" y="78" width="18" height="18" fill="#C44E3B"/>
-      <rect x="78" y="60" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="78" y="78" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="114" y="60" width="18" height="18" fill="#E07B39"/>
-      <rect x="114" y="78" width="18" height="18" fill="#E07B39"/>
-      <rect x="132" y="60" width="18" height="18" fill="#C44E3B"/>
-      <rect x="150" y="60" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="150" y="78" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="186" y="60" width="18" height="18" fill="#D8A657"/>
-      <rect x="204" y="60" width="18" height="18" fill="#E07B39"/>
-      <rect x="222" y="60" width="18" height="18" fill="#C44E3B"/>
-      <rect x="222" y="78" width="18" height="18" fill="#C44E3B"/>
-      <rect x="258" y="60" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="258" y="78" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="276" y="60" width="18" height="18" fill="#D8A657"/>
-      <rect x="294" y="60" width="18" height="18" fill="#E07B39"/>
-      <rect x="330" y="60" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="330" y="78" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="366" y="60" width="18" height="18" fill="#D8A657"/>
-      <rect x="402" y="60" width="18" height="18" fill="#C44E3B"/>
-      <rect x="402" y="78" width="18" height="18" fill="#C44E3B"/>
-      <rect x="42" y="96" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="60" y="96" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="78" y="96" width="18" height="18" fill="#D8A657"/>
-      <rect x="114" y="96" width="18" height="18" fill="#C44E3B"/>
-      <rect x="150" y="96" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="186" y="96" width="18" height="18" fill="#E07B39"/>
-      <rect x="204" y="96" width="18" height="18" fill="#C44E3B"/>
-      <rect x="222" y="96" width="18" height="18" fill="#8A4B6B"/>
-      <rect x="258" y="96" width="18" height="18" fill="#D8A657"/>
-      <rect x="276" y="96" width="18" height="18" fill="#E07B39"/>
-      <rect x="294" y="96" width="18" height="18" fill="#C44E3B"/>
-      <rect x="330" y="96" width="18" height="18" fill="#5A6DA8"/>
-      <rect x="402" y="96" width="18" height="18" fill="#8A4B6B"/>
-    </svg>
-    <p class="tagline">plain-text life admin</p>
-    <p class="hero-lede">Tasks, time, and spending — kept as markdown files you own, on your own machine.</p>
-    <div class="hero-cta">
-      <a class="btn primary" href="https://github.com/mrfatolahi1/Jasem">Get the CLI</a>
-      <a class="btn" href="#start">See how it works</a>
-    </div>
-  </div>
-
-  <a class="scroll-cue" href="#start">
+<!-- ========== PAGE 1 — the wordmark, spelled in cubes ========== -->
+<section class="page" id="top">
+  <h1 class="sr-only">jasem — a plain-text task manager, time tracker, and spending log for your terminal</h1>
+  <a class="scroll-cue" href="#what">
     <span>scroll</span>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
   </a>
+</section>
 
-</header>
+<!-- ========== PAGE 2 — capture, the way you'd say it ========== -->
+<section class="page" id="what" aria-labelledby="what-title">
+  <div class="wrap reveal">
+    <div class="head">
+      <p class="eyebrow">plain-text life admin for your terminal</p>
+      <h2 class="lead" id="what-title">Tasks, time, and spending — written the way you'd say them.</h2>
+      <p class="body">jasem reads the deadline, duration, amount, and tags from plain language, and keeps it all as Markdown under <code>~/.jasem/</code>. Zero dependencies.</p>
+    </div>
 
-<!-- ========== PAGE 3 ONWARD ========== -->
-<main id="start">
+    <div class="term" role="figure" aria-label="Adding a task, a time entry, and a spending record with jasem">
+      <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>capture</span></div>
+<pre><span class="p">$</span> <span class="c">jasem todo</span> <span class="s">"pay rent next friday, high priority, finance"</span>
+<span class="ok">✓</span> added #1: pay rent
+  priority=high  deadline=2026-09-18  tags=finance
 
-  <section class="block">
-    <div class="wrap reveal">
-      <h2>What it tracks</h2>
-      <p class="lead">Three things, one format.</p>
-      <p class="body">Everything you capture becomes a row in a markdown table. The CLI and your text editor read the same files, so nothing is ever locked away from you.</p>
-      <div class="cards">
-        <div class="card">
-          <svg class="mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-            <rect x="2" y="2" width="9" height="9" rx="1.5" fill="#E07B39"/>
-            <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#E07B39" opacity=".35"/>
-            <rect x="2" y="13" width="9" height="9" rx="1.5" fill="#E07B39" opacity=".55"/>
-          </svg>
-          <h3>Tasks</h3>
-          <p>Named lists, deadlines, priorities, and tags — captured in plain language.</p>
-        </div>
-        <div class="card">
-          <svg class="mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-            <rect x="2" y="2" width="9" height="9" rx="1.5" fill="#5A6DA8"/>
-            <rect x="13" y="13" width="9" height="9" rx="1.5" fill="#5A6DA8" opacity=".35"/>
-            <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#5A6DA8" opacity=".55"/>
-          </svg>
-          <h3>Time</h3>
-          <p>Log what you worked on, then read it back as a report by period or tag.</p>
-        </div>
-        <div class="card">
-          <svg class="mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-            <rect x="2" y="13" width="9" height="9" rx="1.5" fill="#8A4B6B"/>
-            <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#8A4B6B" opacity=".35"/>
-            <rect x="13" y="13" width="9" height="9" rx="1.5" fill="#8A4B6B" opacity=".55"/>
-          </svg>
-          <h3>Spending</h3>
-          <p>Records with tags and periods, summarised the same way as your time.</p>
-        </div>
+<span class="p">$</span> <span class="c">jasem track</span> <span class="s">"1h30min code review, work"</span>
+<span class="ok">✓</span> tracked #1 1h 30min · code review · today · <span class="t">#work</span>
+
+<span class="p">$</span> <span class="c">jasem acc</span> <span class="s">"50k lunch with the team, food"</span>
+<span class="ok">✓</span> recorded #1 50,000 · lunch with the team · today · <span class="t">#food</span></pre>
+    </div>
+
+    <div class="cta">
+      <span class="install"><span><span class="prompt">$</span> pipx install jasem</span><button class="copy" type="button" data-copy="pipx install jasem">Copy</button></span>
+      <a class="btn primary" href="https://github.com/mrfatolahi1/Jasem">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ========== PAGE 3 — read it back ========== -->
+<section class="page" id="review" aria-labelledby="review-title">
+  <div class="wrap wide reveal">
+    <div class="head">
+      <p class="eyebrow">Read it back</p>
+      <h2 class="lead" id="review-title">Tables, bars, and sparklines, right in the terminal.</h2>
+    </div>
+
+    <div class="term">
+      <div class="tabs" role="tablist" aria-label="jasem views">
+        <button class="tab" type="button" role="tab" id="tab-todo" aria-controls="panel-todo" aria-selected="true">jasem todo</button>
+        <button class="tab" type="button" role="tab" id="tab-track" aria-controls="panel-track" aria-selected="false" tabindex="-1">jasem track report</button>
+        <button class="tab" type="button" role="tab" id="tab-acc" aria-controls="panel-acc" aria-selected="false" tabindex="-1">jasem acc list</button>
+      </div>
+      <div class="panels">
+<pre role="tabpanel" id="panel-todo" aria-labelledby="tab-todo" tabindex="0"><span class="p">$</span> <span class="c">jasem todo</span>
+ Open tasks <span class="d">────────────────────────────────────────────────────────────────</span>
+ ●  2    med   tomorrow  review the design doc  <span class="t">#work</span>     today
+ ●  3    med   in 3d     renew passport         <span class="t">#admin</span>    today
+ ●  1  <span class="hi">⚑ high</span>  in 5d     pay rent               <span class="t">#finance</span>  today
+ <span class="d">───────────────────────────────────────────────────────────────────</span> 3 open
+
+<span class="p">$</span> <span class="c">jasem todo lists</span>
+Task lists
+  •   3 open  default         3 total
+      1 open  @work           1 total</pre>
+<pre role="tabpanel" id="panel-track" aria-labelledby="tab-track" tabindex="0" hidden><span class="p">$</span> <span class="c">jasem track report week</span>
+ Time report — last 7 days (2026-09-07 → 2026-09-13) <span class="d">───────────────────────</span>
+
+  total          5h 15min
+  trend          <span class="bar">▁▁▁▁▁█▆</span>
+
+  By tag
+    <span class="t">#work</span>      <span class="bar">████████████████████████</span>   3h 30min   67%
+    <span class="t">#personal</span>  <span class="bar">██████▉</span>                          1h   19%
+    <span class="t">#learning</span>  <span class="bar">█████▏</span>                        45min   14%
+  <span class="d">⋮  entries · active days · daily timeline · top activities</span>
+ <span class="d">───────────────────────────────────────────────</span> total 5h 15min · 4 entries</pre>
+<pre role="tabpanel" id="panel-acc" aria-labelledby="tab-acc" tabindex="0" hidden><span class="p">$</span> <span class="c">jasem acc list</span>
+ Spending <span class="d">──────────────────────────────────────────────────────────────────</span>
+ 3  2026-09-12    180,000  groceries            <span class="t">#food</span>
+ 1  2026-09-13     50,000  lunch with the team  <span class="t">#food</span>
+ 2  2026-09-13  1,200,000  new headphones       <span class="t">#gear</span>
+ <span class="d">────────────────────────────────────────────────────</span> 1,430,000 · 3 records
+
+<span class="p">$</span> <span class="c">jasem acc report week</span>
+  By tag
+    <span class="t">#gear</span>  <span class="bar">████████████████████████</span>     1,200,000   84%
+    <span class="t">#food</span>  <span class="bar">████▋</span>                          230,000   16%</pre>
       </div>
     </div>
-  </section>
 
-  <section class="block">
-    <div class="wrap reveal">
-      <h2>Your data</h2>
-      <p class="lead">Three files in a folder you already own.</p>
-      <p class="body">No database, no account, no sync. jasem keeps everything under <code>~/.jasem/</code> as padded markdown tables you can open, diff, and hand-edit.</p>
-
-      <ul class="files">
-        <li><span class="dot" style="background:#E07B39"></span><code>tasks.md</code><span>every task, plus one file per named list</span></li>
-        <li><span class="dot" style="background:#5A6DA8"></span><code>timelog.md</code><span>what you worked on, and for how long</span></li>
-        <li><span class="dot" style="background:#8A4B6B"></span><code>spending.md</code><span>what you spent, and on what</span></li>
-      </ul>
-
-      <figure>
-        <pre class="table"><code>| ID  | ✓ | Priority | Deadline   | Task                      | Tags   | Created    |
-| --- | - | -------- | ---------- | ------------------------- | ------ | ---------- |
-| 4f2 | x | high     | 2026-09-14 | Send the quarterly report | @work  | 2026-09-09 |
-| a91 |   | normal   | 2026-09-20 | Renew the domain          | @admin | 2026-09-11 |</code></pre>
-        <figcaption>Exactly how <code>tasks.md</code> is written to disk. Keep the column order and the CLI keeps reading it.</figcaption>
-      </figure>
-    </div>
-  </section>
-
-  <section class="block">
-    <div class="wrap reveal">
-      <h2>How it works</h2>
-      <p class="lead">Quiet by design.</p>
-      <ul class="facts">
-        <li style="--tile:#E07B39"><strong>Plain text first.</strong> Every entry is a line you can read without jasem installed.</li>
-        <li style="--tile:#5A6DA8"><strong>The CLI and the API share one source.</strong> Write in either; both see the change immediately.</li>
-        <li style="--tile:#D8A657"><strong>Point it anywhere.</strong> <code>JASEM_DIR</code> and friends move the whole store to another folder.</li>
-        <li style="--tile:#8A4B6B"><strong>Jalali and Gregorian.</strong> Both calendars are handled natively.</li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="block">
-    <div class="wrap reveal">
-      <h2>Run the API</h2>
-      <p class="lead">One command, no build step.</p>
-      <p class="body">The Django backend builds jasem's config, stores, and report builders per request. It creates no data of its own.</p>
-      <figure>
-        <pre><code>cd backend
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-python manage.py runserver 127.0.0.1:8000</code></pre>
-        <figcaption>Then the JSON API answers at <code>127.0.0.1:8000/api/</code>.</figcaption>
-      </figure>
-    </div>
-  </section>
-
-  <div class="wrap">
-    <footer>
-      <p>Your data stays on your machine.</p>
-      <p><a href="https://github.com/mrfatolahi1/Jasem">github.com/mrfatolahi1/Jasem</a></p>
-    </footer>
+    <ul class="features">
+      <li style="--tile:#E07B39"><strong>Named lists</strong>Keep work and home apart with <code>jasem todo @work</code>.</li>
+      <li style="--tile:#5A6DA8"><strong>Any AI, or none</strong>Local Ollama by default, or OpenAI-compatible and Claude. Entries still save offline.</li>
+      <li style="--tile:#D8A657"><strong>Plain Markdown</strong>Grep, hand-edit, sync, or version-control <code>~/.jasem/</code>.</li>
+      <li style="--tile:#8A4B6B"><strong>Jalali calendar</strong>Set <code>JASEM_JALALI=true</code> to type and read Persian dates.</li>
+    </ul>
   </div>
 
-</main>
+  <footer class="wrap wide">
+    <div class="foot">
+      <p>MIT licensed · Python 3.8+</p>
+      <p><a href="https://github.com/mrfatolahi1/Jasem/wiki">Guide &amp; command reference</a><a href="https://github.com/mrfatolahi1/Jasem">GitHub</a></p>
+    </div>
+  </footer>
+</section>
 
 <script>
   (function () {
-    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var targets = document.querySelectorAll(".reveal");
-    var hero = document.querySelector(".hero");
 
-    if (reduce || !("IntersectionObserver" in window)) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) {
       targets.forEach(function (el) { el.classList.add("in"); });
-      hero.classList.add("in");
       return;
     }
 
-    function arm(options) {
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.add("in");
-          io.unobserve(entry.target);
-        });
-      }, options);
-      return io;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("in");
+        io.unobserve(entry.target);
+      });
+    }, { threshold: 0.2 });
+
+    targets.forEach(function (el) { io.observe(el); });
+  })();
+
+  // The review terminal's tabs: click, or arrow keys once a tab has focus.
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
+
+    function select(tab) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute("aria-selected", on);
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+      });
     }
 
-    var sections = arm({ rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-    targets.forEach(function (el) { sections.observe(el); });
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener("click", function () { select(tab); });
+      tab.addEventListener("keydown", function (event) {
+        var step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+        if (!step) return;
+        var next = tabs[(i + step + tabs.length) % tabs.length];
+        select(next);
+        next.focus();
+      });
+    });
+  })();
 
-    // Hold the wordmark until most of page 2 is on screen.
-    arm({ threshold: 0.45 }).observe(hero);
+  // Copy the install command.
+  (function () {
+    document.querySelectorAll(".copy").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(button.dataset.copy).then(function () {
+          button.textContent = "Copied";
+          setTimeout(function () { button.textContent = "Copy"; }, 1600);
+        });
+      });
+    });
+  })();
+
+  // One page per wheel gesture. Touch and keys already step a page at a time through CSS
+  // snapping, but browsers snap the wheel unevenly: a small nudge springs back, a long
+  // trackpad fling can skip a page. So on the wheel, move page by page here.
+  (function () {
+    var pages = document.querySelectorAll(".page");
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var busy = false;      // a move is under way, or its trailing trackpad inertia still is
+    var movedAt = 0;
+    var lastWheel = 0;
+
+    function nearest() {
+      var best = 0;
+      pages.forEach(function (page, i) {
+        if (Math.abs(page.offsetTop - scrollY) < Math.abs(pages[best].offsetTop - scrollY)) best = i;
+      });
+      return best;
+    }
+
+    addEventListener("wheel", function (event) {
+      if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;   // zooming, or sideways
+      var now = performance.now();
+      var pause = now - lastWheel;
+      lastWheel = now;
+
+      var i = nearest();
+      var page = pages[i];
+      var down = event.deltaY > 0;
+      // A page taller than the screen scrolls as usual until its far edge is on screen.
+      if (down ? scrollY + innerHeight < page.offsetTop + page.offsetHeight - 2 : scrollY > page.offsetTop + 2) return;
+
+      event.preventDefault();
+      if (busy) {
+        // A new gesture starts once the wheel has rested and the last move has landed.
+        if (pause < 250 || now - movedAt < 700) return;
+        busy = false;
+      }
+      var next = Math.max(0, Math.min(pages.length - 1, i + (down ? 1 : -1)));
+      if (next === i) return;
+      busy = true;
+      movedAt = now;
+      scrollTo({ top: pages[next].offsetTop, behavior: reduce ? "auto" : "smooth" });
+    }, { passive: false });
   })();
 </script>
 
@@ -812,14 +669,16 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
   }
 }
 </script>
-
 <script type="module">
-  // Page 1: the jasem wordmark spelled in painted wooden cubes, more scattered around it
-  // on a slate floor, seen from straight
-  // above under a warm spotlight. Without WebGL (or the CDN) it stays a dark room.
+  // The room: one dark slate floor under all three pages, seen from straight above and lit
+  // from beyond the top of page 1. Page 1 spells the wordmark in painted wooden cubes with
+  // more strewn around it; further down, a few cubes lie about the words. Scrolling walks
+  // the camera down the floor, away from the light. Without WebGL (or the CDN) it stays a
+  // dark room.
 
-  const pit = document.querySelector(".pit");
-  const canvas = pit.querySelector("canvas");
+  const room = document.querySelector(".scene");
+  const canvas = room.querySelector("canvas");
+  const pages = [...document.querySelectorAll(".page")];
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const coarse = matchMedia("(pointer: coarse)").matches;
 
@@ -828,7 +687,10 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
   const DARK = 0x0A0806;
   const CUBE_PX = coarse ? 34 : 42;   // edge of one cube on screen, before the camera pulls back
   const DISTANCE = 1.6;               // how far the camera pulls back; cubes keep their size
-  const COVERAGE = 0.16;              // share of the floor under cubes
+  const COVERAGE = 0.16;              // share of page 1's floor under cubes
+  const SPARSE = 0.028;               // and of the floor about the words further down
+  const DIM = 0.78;                    // light left, a page further from its source (beyond distance alone)
+  const FILL = 0.55;                  // the room's soft fill light, on page 1
   const CAPACITY = 1600;
   const FOV = 34;
 
@@ -860,7 +722,7 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
     renderer.toneMapping = THREE.NeutralToneMapping;   // keeps the logo hues honest
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.shadowMap.autoUpdate = false;              // cubes only change on resize
+    renderer.shadowMap.autoUpdate = false;              // redrawn only when the cubes or the light's aim change
 
     // three's soft shadows take 5 taps jittered by per-pixel noise, which leaves shadow
     // edges grainy. Swap in a steady 3 × 3 grid of filtered taps for smooth edges.
@@ -886,12 +748,13 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
     camera.up.set(0, 0, -1);
 
     // Soft fill from the room, so shadows stay grey rather than black.
-    scene.add(new THREE.HemisphereLight(0xB4B0C8, 0x2A2118, 0.55));
+    const hemisphere = new THREE.HemisphereLight(0xB4B0C8, 0x4A3C2C, FILL);   // ground: warm bounce off the floor
+    scene.add(hemisphere);
 
-    // Placed by light() once the frame is known: just past the top edge of the screen.
+    // Hung by hang() once the frame is known, and aimed by follow() as the camera walks.
     const spot = new THREE.SpotLight(LIGHT, 0, 0, 0.85, 1, 2);
     spot.castShadow = true;
-    spot.shadow.mapSize.setScalar(coarse ? 2048 : 4096);   // drawn once, so a big map is cheap
+    spot.shadow.mapSize.setScalar(coarse ? 2048 : 4096);   // redrawn only while scrolling, so a big map is cheap
     spot.shadow.bias = -0.00005;   // kept tiny: any larger and shadows detach from the cubes
     spot.shadow.normalBias = 0.004;
     spot.shadow.radius = 1;        // a wider blur lets lit floor bleed in along the cubes' feet
@@ -958,7 +821,8 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(400, 400),
-      new THREE.MeshStandardMaterial({ color: 0x2F3136, roughness: 0.85 }),   // cool slate, so the yellow reads as light
+      // Cool slate, so the yellow reads as light; dithered, so its dim gradients don't band.
+      new THREE.MeshStandardMaterial({ color: 0x2F3136, roughness: 0.85, dithering: true }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
@@ -1011,50 +875,100 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
     dust.frustumCulled = false;
     scene.add(dust);
 
-    const along = new THREE.Vector3();
 
-    // Rake the light across the floor from beyond the top edge: brightest at the top of
-    // the screen, fading downwards, with shadows stretching towards the viewer.
-    // `reach` is half the floor's depth on screen, so every screen shape gets the same look.
-    function light(reach) {
-      spot.position.set(0, reach * 1.6, -reach * 1.55);
-      spot.target.position.set(0, 0, reach * 0.1);
+    /* ---------- framing: the canvas is fixed, and the camera walks down the floor ---------- */
+
+    // One CSS pixel of canvas covers `perPx` units of floor, so the floor under any point
+    // of the document is known; the camera sits over the middle of whatever is on screen.
+    const view = { width: 0, height: 0, halfW: 0, halfD: 0, perPx: 0 };
+    let depth = 0;                   // how far down the floor the camera has walked
+
+    function aim(width, height) {
+      const aspect = width / height;
+      // Portrait screens rise higher, so a phone still sees plenty of floor.
+      camera.position.y = 30 * DISTANCE * THREE.MathUtils.clamp(1 / aspect, 1, 2.2);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      Object.assign(view, { width, height });
+      view.halfD = camera.position.y * Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+      view.halfW = view.halfD * aspect;
+      view.perPx = (2 * view.halfD) / height;
+      look();
+    }
+
+    function look() {
+      camera.position.z = depth;
+      camera.lookAt(0, 0, depth);
+      camera.updateMatrixWorld();
+    }
+
+    const floorX = (clientX) => (clientX - view.width / 2) * view.perPx;
+    const floorZ = (documentY) => (documentY - view.height / 2) * view.perPx;
+
+    /* ---------- the light: hung past page 1's top edge, turning to follow the camera ---------- */
+
+    const home = { reach: 0, slant: 0 };   // how the light falls on the middle of page 1
+    const LUX = 3.68;                // light strength over distance squared: page 1 as bright as before
+
+    // Hang the light high above and far behind the top edge of page 1, striking its middle
+    // at 45°. Hung this far off, it still comes from the top of page 1, yet its angle flattens
+    // only a little further down, so shadows there stay about a cube long. It never moves.
+    function hang() {
+      const reach = view.halfD;
+      spot.position.set(0, reach * 12, -reach * 11.9);
+      home.reach = reach;
+      home.slant = spot.position.y / spot.position.distanceTo(new THREE.Vector3(0, 0, reach * 0.1));
+    }
+
+    const along = new THREE.Vector3();
+    const toward = new THREE.Vector3();
+    const corner = new THREE.Vector3();
+
+    // Aim the light at the floor under the camera, its cone just wide enough for the screen,
+    // so the shadow map spends every texel where it is seen. The further down, the dimmer:
+    // by distance and slant, as a real light would, then by DIM for every page walked.
+    function follow() {
+      const target = spot.target.position.set(0, 0, depth + home.reach * 0.1);
       spot.target.updateMatrixWorld();
-      spot.intensity = 4200 * (reach / 14.7) ** 2;
-      spot.shadow.camera.near = reach * 0.4;
-      spot.shadow.camera.far = reach * 6;
+      toward.subVectors(target, spot.position).normalize();
+
+      let widest = 0;
+      let farthest = 0;
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          corner.set(sx * view.halfW, 0, depth + sz * view.halfD).sub(spot.position);
+          const reach = corner.length();
+          widest = Math.max(widest, Math.acos(THREE.MathUtils.clamp(corner.dot(toward) / reach, -1, 1)));
+          farthest = Math.max(farthest, reach);
+        }
+      }
+      spot.angle = Math.min(widest * 1.02, Math.PI / 2 - 0.01);
+
+      const distance = spot.position.distanceTo(target);
+      const slant = spot.position.y / distance;
+      const walked = depth / (2 * view.halfD);   // in screens
+      const left = DIM ** walked;
+      spot.intensity = LUX * distance ** 2 * (home.slant / slant) * left;
+      hemisphere.intensity = FILL * (0.75 + 0.25 * left);
+      // Far from a light, the room's soft bounce does more of the lighting, so shadows
+      // there are gentler than the crisp ones right under it.
+      spot.shadow.intensity = 1 - 0.45 * Math.min(1, walked);
+
+      const nearest = spot.position.distanceTo(corner.set(0, 0, depth - view.halfD));
+      spot.shadow.camera.near = Math.max(0.5, nearest * 0.85 - size * 2);
+      spot.shadow.camera.far = farthest * 1.05;
       spot.shadow.camera.updateProjectionMatrix();
       renderer.shadowMap.needsUpdate = true;
 
-      const spread = Math.tan(spot.angle) * spot.position.distanceTo(spot.target.position);
+      room.style.setProperty("--depth", Math.min(1, walked).toFixed(3));
+
+      const spread = Math.tan(spot.angle) * distance;
       dustPlaces.forEach(([t, r, a], i) => {
-        along.copy(spot.position).lerp(spot.target.position, t);
+        along.copy(spot.position).lerp(target, t);
         dustPositions.set(
           [along.x + Math.cos(a) * r * spread * t, along.y, along.z + Math.sin(a) * r * spread * t], i * 3);
       });
       dustGeometry.attributes.position.needsUpdate = true;
-    }
-
-    /* ---------- framing ---------- */
-
-    const ndc = new THREE.Vector2();
-    const ray = new THREE.Raycaster();
-    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-
-    function aim(aspect) {
-      // Portrait screens rise higher, so a phone still sees plenty of floor.
-      camera.position.set(0, 30 * DISTANCE * THREE.MathUtils.clamp(1 / aspect, 1, 2.2), 0);
-      camera.lookAt(0, 0, 0);
-      camera.aspect = aspect;
-      camera.updateProjectionMatrix();
-      camera.updateMatrixWorld();
-      light(camera.position.y * Math.tan(THREE.MathUtils.degToRad(FOV / 2)));
-    }
-
-    function project(x, y) {
-      ndc.set(x, y);
-      ray.setFromCamera(ndc, camera);
-      return ray.ray.intersectPlane(ground, new THREE.Vector3());
     }
 
     /* ---------- the wordmark, spelled in cubes in the middle of the floor ---------- */
@@ -1081,7 +995,6 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
     let size = 0;                    // edge of a scattered cube, fixed on first layout
     let spacing = 0;                 // grid cell for neighbour lookups
     let tile = 0;                    // edge of a wordmark cube: the scatter's, unless the screen is narrow
-    const spots = [];                // [x, z] of every scattered cube
     const cells = new Map();         // every cube as [x, z, edge, inWord]
 
     const key = (i, j) => `${i},${j}`;
@@ -1104,10 +1017,13 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
     // around the word follows the letters; not touching another cube; and neither one in
     // the other's shadow, so every lit face stays lit.
     function free(x, z) {
+      // Far from the light, shadows run long: look as far as this cube's own would reach.
+      const shadow = (Math.hypot(x - spot.position.x, z - spot.position.z) * size) / (spot.position.y - size);
+      const range = THREE.MathUtils.clamp(Math.ceil((shadow + 2 * size) / spacing), 3, 12);
       const i = Math.floor(x / spacing);
       const j = Math.floor(z / spacing);
-      for (let di = -3; di <= 3; di++) {
-        for (let dj = -3; dj <= 3; dj++) {
+      for (let di = -range; di <= range; di++) {
+        for (let dj = -range; dj <= range; dj++) {
           for (const [ox, oz, edge, inWord] of cells.get(key(i + di, j + dj)) ?? []) {
             const apart = inWord ? size * MARGIN : (size + edge) * 0.775;   // 0.775: wider than both diagonals
             if ((ox - x) ** 2 + (oz - z) ** 2 < apart * apart) return false;
@@ -1165,62 +1081,9 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
       }));
     }
 
-    let litFrom = null;              // where the light stood when the cubes were placed
-
-    // The largest wordmark cube that keeps the word within the screen, between corners a and b.
-    function wordmarkFit(a, b) {
-      return Math.min(
-        ((b.x - a.x) * 0.88) / (WORDMARK[0].length * PITCH),
-        ((b.z - a.z) * 0.4) / (WORDMARK.length * PITCH),
-      );
-    }
-
-    // Spell the wordmark, then top up the rest of the visible floor (plus a margin) to
-    // COVERAGE, keeping what is already there. If the light has moved (a phone turned on
-    // its side) or the wordmark no longer fits, start over.
-    function scatter() {
-      const a = project(-1, 1);
-      const b = project(1, -1);
-      if (!a || !b) return false;
-      const fit = Math.min(size, wordmarkFit(a, b));   // the same cubes as the scatter, if the word fits
-      const moved = litFrom && !litFrom.equals(spot.position);
-      if (moved || (tile && Math.abs(fit - tile) > fit * 0.02)) {
-        spots.length = 0;
-        cells.clear();
-        cubes.count = 0;
-        contacts.count = 0;
-        tile = 0;
-      }
-      litFrom = spot.position.clone();
-
-      let added = false;
-      if (!tile) {
-        tile = fit;
-        spell();
-        added = true;
-      }
-
-      const minX = a.x - size, maxX = b.x + size;
-      const minZ = a.z - size, maxZ = b.z + size;
-      const already = spots.filter(([x, z]) => x > minX && x < maxX && z > minZ && z < maxZ).length;
-      let wanted = Math.round(((maxX - minX) * (maxZ - minZ) * COVERAGE) / (size * size)) - already;
-      let tries = wanted * 40;
-      while (wanted > 0 && tries-- > 0 && cubes.count < CAPACITY) {
-        const x = minX + Math.random() * (maxX - minX);
-        const z = minZ + Math.random() * (maxZ - minZ);
-        if (!free(x, z)) continue;
-        claim(x, z, size);
-        spots.push([x, z]);
-        drop(x, z, size, Math.random() * Math.PI * 2, PALETTE[Math.floor(Math.random() * PALETTE.length)]);
-        wanted--;
-        added = true;
-      }
-      return added;
-    }
-
     const cubes = new THREE.InstancedMesh(
       new RoundedBoxGeometry(1, 1, 1, 3, 0.06),
-      new THREE.MeshStandardMaterial({ map: grain, roughness: 0.7 }),
+      new THREE.MeshStandardMaterial({ map: grain, roughness: 0.7, dithering: true }),
       CAPACITY,
     );
     cubes.count = 0;
@@ -1274,118 +1137,185 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
       cubes.setColorAt(i, tint);
     }
 
+    // The largest wordmark cube that keeps the word within the screen.
+    function wordmarkFit() {
+      return Math.min(
+        (2 * view.halfW * 0.88) / (WORDMARK[0].length * PITCH),
+        (2 * view.halfD * 0.4) / (WORDMARK.length * PITCH),
+      );
+    }
+
+    // Strew cubes at random over a patch of floor until `coverage` of it is taken, keeping
+    // out of the `clear` rectangles where a page's words sit.
+    function strew(minX, maxX, minZ, maxZ, coverage, clear = []) {
+      const pad = size * 1.2;
+      const blocked = (x, z) =>
+        clear.some((r) => x > r.minX - pad && x < r.maxX + pad && z > r.minZ - pad && z < r.maxZ + pad);
+      let wanted = Math.round(((maxX - minX) * (maxZ - minZ) * coverage) / (size * size));
+      let tries = wanted * 40;
+      while (wanted > 0 && tries-- > 0 && cubes.count < CAPACITY) {
+        const x = minX + Math.random() * (maxX - minX);
+        const z = minZ + Math.random() * (maxZ - minZ);
+        if (blocked(x, z) || !free(x, z)) continue;
+        claim(x, z, size);
+        drop(x, z, size, Math.random() * Math.PI * 2, PALETTE[Math.floor(Math.random() * PALETTE.length)]);
+        wanted--;
+      }
+    }
+
+    // Lay the whole floor: the wordmark and a crowd of cubes on page 1, then a few cubes
+    // about the words of every page after it.
+    function furnish() {
+      cells.clear();
+      cubes.count = 0;
+      contacts.count = 0;
+
+      tile = Math.min(size, wordmarkFit());
+      spell();
+
+      const top = (el) => el.getBoundingClientRect().top + scrollY;
+      const side = view.halfW + size;
+      const firstEnd = pages[1] ? floorZ(top(pages[1])) : view.halfD + size;
+      strew(-side, side, -view.halfD - size, firstEnd, COVERAGE);
+
+      pages.slice(1).forEach((page, i, rest) => {
+        const from = floorZ(top(page));
+        const to = floorZ(top(page) + page.offsetHeight) + (i === rest.length - 1 ? view.halfD : 0);
+        const clear = [...page.querySelectorAll(".wrap")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            minX: floorX(r.left), maxX: floorX(r.right),
+            minZ: floorZ(r.top + scrollY), maxZ: floorZ(r.bottom + scrollY),
+          };
+        });
+        strew(-side, side, from, to, SPARSE, clear);
+      });
+
+      cubes.instanceMatrix.needsUpdate = true;
+      cubes.instanceColor.needsUpdate = true;
+      contacts.instanceMatrix.needsUpdate = true;
+      renderer.shadowMap.needsUpdate = true;
+    }
+
+    let laid = "";                   // the canvas and document size the floor was laid for
+
     function layout() {
-      const width = pit.clientWidth;
-      const height = pit.clientHeight;
+      const width = room.clientWidth;
+      const height = room.clientHeight;
       if (!width || !height) return;
       renderer.setSize(width, height, false);
-      aim(width / height);
+      aim(width, height);
 
       if (!size) {
-        const a = project(-1, 1);
-        const b = project(1, -1);
-        if (!a || !b) return;
-        size = (CUBE_PX * ((b.z - a.z) / height)) / DISTANCE;
+        size = (CUBE_PX * view.perPx) / DISTANCE;
         // On a narrow screen the wordmark shrinks to fit; shrink the scatter with it,
         // so every cube on the floor is the same size.
-        size = Math.min(size, wordmarkFit(a, b));
+        size = Math.min(size, wordmarkFit());
         spacing = size * 1.55;
       }
 
-      if (scatter()) {
-        cubes.instanceMatrix.needsUpdate = true;
-        cubes.instanceColor.needsUpdate = true;
-        contacts.instanceMatrix.needsUpdate = true;
-        renderer.shadowMap.needsUpdate = true;
+      hang();
+      const shape = `${width}x${height}x${document.documentElement.scrollHeight}`;
+      if (shape !== laid) {
+        laid = shape;
+        furnish();
       }
+      follow();
     }
 
     /* ---------- drawing ---------- */
 
-    let frame = 0;
+    let pending = 0;
     let skip = false;
     let sampleFrom = 0;
     let sampled = 0;
-    let covered = false;
 
     function draw(now) {
       dust.material.uniforms.uTime.value = now / 1000;
       renderer.render(scene, camera);
-      pit.classList.add("ready");
+      room.classList.add("ready");
+    }
+
+    // Walk the camera to wherever the page has scrolled; true if it moved.
+    function walk() {
+      const next = scrollY * view.perPx;
+      if (next === depth) return false;
+      depth = next;
+      look();
+      follow();
+      return true;
     }
 
     // Drop the resolution a notch at a time if the GPU can't keep up.
     function pace(now) {
       sampled++;
       if (now - sampleFrom < 2000) return;
-      const fps = (sampled * 1000) / (now - sampleFrom);
-      if (fps < 25 && ratio > 1) {     // frames are drawn at half rate, so 30 is on pace
+      if ((sampled * 1000) / (now - sampleFrom) < 45 && ratio > 1) {
         ratio = Math.max(1, ratio - 0.25);
         renderer.setPixelRatio(ratio);
-        renderer.setSize(pit.clientWidth, pit.clientHeight, false);
+        renderer.setSize(room.clientWidth, room.clientHeight, false);
         dust.material.uniforms.uScale.value = ratio;
       }
       sampleFrom = now;
       sampled = 0;
     }
 
-    // Nothing moves but the dust, so every other frame is plenty.
+    // Every frame while the page scrolls; otherwise only the dust moves, so every other frame.
     function tick(now) {
-      frame = 0;
-      if (covered || document.hidden) return;
+      pending = 0;
+      if (document.hidden) return;
       skip = !skip;
-      if (!skip) {
-        draw(now);
-        pace(now);
-      }
-      frame = requestAnimationFrame(tick);
+      if (walk() || !skip) draw(now);
+      pace(now);
+      pending = requestAnimationFrame(tick);
     }
 
     function wake() {
-      if (covered || document.hidden) return;
+      if (document.hidden) return;
       if (reduce) {
+        walk();
         draw(0);
-      } else if (!frame) {
+      } else if (!pending) {
         sampleFrom = performance.now();
         sampled = 0;
-        frame = requestAnimationFrame(tick);
+        pending = requestAnimationFrame(tick);
       }
     }
 
-    /* ---------- page 2 slides over the floor ---------- */
-
-    let scrollQueued = false;
-    function onScroll() {
-      scrollQueued = false;
-      const progress = THREE.MathUtils.clamp(scrollY / (pit.offsetHeight || 1), 0, 1);
-      pit.style.setProperty("--cover", progress.toFixed(3));
-      if ((progress >= 1) !== covered) {
-        covered = progress >= 1;
-        pit.classList.toggle("covered", covered);
-        wake();
-      }
-    }
-    addEventListener("scroll", () => {
-      if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(onScroll); }
-    }, { passive: true });
     document.addEventListener("visibilitychange", wake);
+
+    // With motion reduced there is no running loop: redraw only when the page scrolls.
+    if (reduce) {
+      let queued = false;
+      addEventListener("scroll", () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          if (walk()) draw(0);
+        });
+      }, { passive: true });
+    }
 
     /* ---------- go ---------- */
 
     layout();
-    onScroll();
+    walk();
     wake();
 
     let resizeQueued = false;
-    new ResizeObserver(() => {
+    const resized = new ResizeObserver(() => {
       if (resizeQueued) return;
       resizeQueued = true;
       requestAnimationFrame(() => {
         resizeQueued = false;
         layout();
-        if (!covered && !document.hidden) draw(performance.now());   // resizing clears the canvas
+        walk();
+        if (!document.hidden) draw(performance.now());   // resizing clears the canvas
       });
-    }).observe(pit);
+    });
+    resized.observe(room);
+    resized.observe(document.body);   // pages growing or shrinking move where their words sit
   }
 </script>
 
