@@ -1069,11 +1069,11 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
     ];
     const INK = { O: "#E07B39", R: "#C44E3B", P: "#8A4B6B", G: "#D8A657", B: "#5A6DA8" };
     // Wordmark cubes are set down by hand: each strays up to NUDGE cube edges from its place
-    // and turns up to TWIST radians (about 7°). PITCH leaves just enough room that a cube left
+    // and turns up to TWIST radians (about 11°). PITCH leaves just enough room that a cube left
     // exactly in place can never bump a neighbour that strayed as far as it may.
-    const PITCH = 1.16;
-    const NUDGE = 0.08;
-    const TWIST = 0.12;
+    const PITCH = 1.24;
+    const NUDGE = 0.13;
+    const TWIST = 0.2;
     const MARGIN = 2.6;              // scattered cubes keep this far from the word, in cube edges
 
     /* ---------- scattering: random spots, never touching, never shading each other ---------- */
