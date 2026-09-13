@@ -1056,7 +1056,7 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
       return ray.ray.intersectPlane(ground, new THREE.Vector3());
     }
 
-    /* ---------- scattering: random spots, never touching ---------- */
+    /* ---------- scattering: random spots, never touching, never shading each other ---------- */
 
     let size = 0;                    // edge of one cube, fixed on first layout
     let spacing = 0;                 // closest two cube centres may be
@@ -1065,13 +1065,30 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
 
     const key = (i, j) => `${i},${j}`;
 
+    // Whether cube B stands in cube A's shadow. The shadow runs along the floor away from
+    // the light, as far as the light's angle throws A's top edge, and is treated as a strip
+    // wide enough for both cubes turned any which way.
+    function shades(ax, az, bx, bz) {
+      const lx = ax - spot.position.x;
+      const lz = az - spot.position.z;
+      const reach = Math.hypot(lx, lz);
+      const length = (reach * size) / (spot.position.y - size);
+      const along = ((bx - ax) * lx + (bz - az) * lz) / reach;
+      const across = Math.abs((bx - ax) * lz - (bz - az) * lx) / reach;
+      const half = size * 0.72;   // half a cube's diagonal
+      return along > -half && along < length + 2 * half && across < 2 * half;
+    }
+
+    // Room for a cube: not touching another, and neither one in the other's shadow,
+    // so every lit face stays lit.
     function free(x, z) {
       const i = Math.floor(x / spacing);
       const j = Math.floor(z / spacing);
-      for (let di = -1; di <= 1; di++) {
-        for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -3; di <= 3; di++) {
+        for (let dj = -3; dj <= 3; dj++) {
           for (const [ox, oz] of cells.get(key(i + di, j + dj)) ?? []) {
             if ((ox - x) ** 2 + (oz - z) ** 2 < spacing * spacing) return false;
+            if (shades(ox, oz, x, z) || shades(x, z, ox, oz)) return false;
           }
         }
       }
@@ -1085,11 +1102,22 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
       spots.push([x, z]);
     }
 
+    let litFrom = null;              // where the light stood when the cubes were placed
+
     // Top up the visible floor (plus a margin) to COVERAGE, keeping what is already there.
+    // If the light has moved (a phone turned on its side), start over, so no cube is left
+    // standing in another's shadow.
     function scatter() {
       const a = project(-1, 1);
       const b = project(1, -1);
       if (!a || !b) return false;
+      if (litFrom && !litFrom.equals(spot.position)) {
+        spots.length = 0;
+        cells.clear();
+        cubes.count = 0;
+        contacts.count = 0;
+      }
+      litFrom = spot.position.clone();
       const minX = a.x - size, maxX = b.x + size;
       const minZ = a.z - size, maxZ = b.z + size;
       const already = spots.filter(([x, z]) => x > minX && x < maxX && z > minZ && z < maxZ).length;
