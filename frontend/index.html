@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>jasem — plain-text life admin</title>
 <meta name="description" content="Tasks, time, and spending, kept as markdown files you own. A local companion for the jasem CLI.">
-<meta name="theme-color" content="#FAF6F0">
+<meta name="theme-color" content="#0A0806">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.min.js" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs" crossorigin>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='2' height='2' fill='%23E07B39'/%3E%3Crect x='2' width='2' height='2' fill='%235A6DA8'/%3E%3Crect y='2' width='2' height='2' fill='%23D8A657'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%23C44E3B'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -49,7 +52,7 @@
     font-size: 17px;
     line-height: 1.65;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   a { color: var(--link); }
@@ -63,11 +66,116 @@
   .wrap { max-width: 720px; margin: 0 auto; padding: 0 var(--s3); }
 
   /* ============================================================
-     PHASE 1 — the calm: logo, light ground, cubes drifting
+     PAGE 1 — the pit: a dark room full of cubes, lit from above
+     ============================================================ */
+
+  /* Sticky, so page 2 slides over it like a curtain. */
+  .pit {
+    --pit: #0A0806;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100svh;
+    overflow: hidden;
+    isolation: isolate;
+    background:
+      radial-gradient(55% 50% at 50% 42%, rgba(255, 196, 92, 0.09), transparent 72%),
+      var(--pit);
+    touch-action: pan-y;
+  }
+
+  .pit.covered { visibility: hidden; }
+
+  .pit canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    opacity: 0;
+    transition: opacity 1.4s var(--ease);
+  }
+
+  .pit.ready canvas { opacity: 1; }
+
+  /* The light pouring in from above the frame. */
+  .pit-light {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    background:
+      radial-gradient(26% 22% at 50% -6%, rgba(255, 226, 150, 0.6), transparent 78%),
+      radial-gradient(40% 70% at 50% -10%, rgba(255, 196, 90, 0.2), transparent 82%);
+  }
+
+  /* The dark closing in at the edges, and deepening as page 2 covers it. */
+  .pit::before,
+  .pit::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .pit::before {
+    z-index: 2;
+    background:
+      radial-gradient(90% 80% at 50% 36%, transparent 40%, rgba(5, 4, 3, 0.85) 100%),
+      linear-gradient(to top, rgba(5, 4, 3, 0.8), transparent 30%);
+  }
+
+  .pit::after {
+    z-index: 4;
+    background: #050403;
+    opacity: calc(var(--cover, 0) * 0.9);
+  }
+
+  .pit-hint {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--s4) + 64px);
+    z-index: 3;
+    transform: translateX(-50%);
+    margin: 0;
+    width: max-content;
+    max-width: calc(100% - 2 * var(--s3));
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(246, 232, 210, 0.66);
+    text-shadow: 0 1px 14px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s var(--ease);
+  }
+
+  .pit.ready .pit-hint { opacity: 1; transition-delay: 1.6s; }
+  .pit.ready.touched .pit-hint { opacity: 0; transition-delay: 2.4s; }
+
+  .pit-hint .touch { display: none; }
+
+  @media (hover: none) {
+    .pit-hint .mouse { display: none; }
+    .pit-hint .touch { display: inline; }
+  }
+
+  .scroll-cue.on-dark {
+    z-index: 3;
+    color: rgba(246, 232, 210, 0.72);
+    text-shadow: 0 1px 14px rgba(0, 0, 0, 0.9);
+  }
+
+  /* ============================================================
+     PAGE 2 — the calm: logo, light ground, cubes drifting
      ============================================================ */
 
   .hero {
     position: relative;
+    z-index: 1;
     min-height: 100svh;
     display: flex;
     flex-direction: column;
@@ -76,7 +184,13 @@
     padding: var(--s6) var(--s3) var(--s7);
     overflow: hidden;
     isolation: isolate;
+    background: var(--paper);
+    box-shadow: 0 -28px 80px rgba(0, 0, 0, 0.45);
   }
+
+  /* The wordmark waits for page 2 to arrive before it assembles. */
+  .js .hero:not(.in) .hero-inner,
+  .js .hero:not(.in) .logo rect { animation-play-state: paused; }
 
   /* Soft colour washes pulled from the logo — the whole mood sits here. */
   .hero::before {
@@ -289,10 +403,10 @@
   }
 
   /* ============================================================
-     PHASE 2 — the substance: words and data
+     PAGE 3 ONWARD — the substance: words and data
      ============================================================ */
 
-  main { position: relative; background: var(--paper); }
+  main { position: relative; z-index: 1; background: var(--paper); }
 
   section.block { padding-block: var(--s6); }
 
@@ -479,6 +593,7 @@
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     .cube, .cube .spin, .scroll-cue svg, .logo rect, .hero-inner { animation: none !important; }
+    .pit-hint { display: none; }
     .js .reveal { opacity: 1; transform: none; }
     * { transition-duration: 0.01ms !important; }
   }
@@ -488,8 +603,19 @@
 
 <script>document.documentElement.classList.add("js");</script>
 
-<!-- ========== PHASE 1 ========== -->
-<header class="hero">
+<!-- ========== PAGE 1 ========== -->
+<div class="pit">
+  <canvas aria-hidden="true"></canvas>
+  <div class="pit-light" aria-hidden="true"></div>
+  <p class="pit-hint" aria-hidden="true"><span class="mouse">wade through the cubes · click to splash</span><span class="touch">tap to splash the cubes</span></p>
+  <a class="scroll-cue on-dark" href="#intro">
+    <span>scroll</span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+  </a>
+</div>
+
+<!-- ========== PAGE 2 ========== -->
+<header class="hero" id="intro">
 
   <div class="cubes" aria-hidden="true">
     <div class="cube far"  style="--s:76px; --c:var(--orange); --d:22s; --r:58s; --dx:26px; --dy:-34px; "><div class="spin"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
@@ -584,7 +710,7 @@
 
 </header>
 
-<!-- ========== PHASE 2 ========== -->
+<!-- ========== PAGE 3 ONWARD ========== -->
 <main id="start">
 
   <section class="block">
@@ -688,22 +814,598 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
   (function () {
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var targets = document.querySelectorAll(".reveal");
+    var hero = document.querySelector(".hero");
 
     if (reduce || !("IntersectionObserver" in window)) {
       targets.forEach(function (el) { el.classList.add("in"); });
+      hero.classList.add("in");
       return;
     }
 
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("in");
-        io.unobserve(entry.target);
-      });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    function arm(options) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("in");
+          io.unobserve(entry.target);
+        });
+      }, options);
+      return io;
+    }
 
-    targets.forEach(function (el) { io.observe(el); });
+    var sections = arm({ rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    targets.forEach(function (el) { sections.observe(el); });
+
+    // Hold the wordmark until most of page 2 is on screen.
+    arm({ threshold: 0.45 }).observe(hero);
   })();
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/",
+    "rapier": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs"
+  }
+}
+</script>
+
+<script type="module">
+  // Page 1: a pit of logo-coloured cubes under a warm spotlight.
+  // Without WebGL (or the CDN) the pit stays a dark, softly lit room.
+
+  const pit = document.querySelector(".pit");
+  const canvas = pit.querySelector("canvas");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const coarse = matchMedia("(pointer: coarse)").matches;
+
+  const PALETTE = ["#E07B39", "#C44E3B", "#8A4B6B", "#D8A657", "#5A6DA8"];
+  const LIGHT = 0xFFD47A;
+  const DARK = 0x0A0806;
+  const STEP = 1 / 60;
+  const GRAVITY = -34;
+  const LAYERS = 3;                // how deep the pile is, in cubes
+  const CAPACITY = coarse ? 520 : 1600;
+  const HAND_UP = 40;              // where the cursor's "hand" rests when out of the pit
+
+  function hasWebGL() {
+    try {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+      return !!gl;
+    } catch {
+      return false;
+    }
+  }
+
+  if (hasWebGL()) {
+    start().catch((error) => console.warn("jasem: the cube pit could not start", error));
+  }
+
+  async function start() {
+    const [THREE, { RoundedBoxGeometry }, { default: RAPIER }] = await Promise.all([
+      import("three"),
+      import("three/addons/geometries/RoundedBoxGeometry.js"),
+      import("rapier"),
+    ]);
+    await RAPIER.init();
+
+    /* ---------- renderer, camera, lights ---------- */
+
+    let ratio = Math.min(devicePixelRatio, coarse ? 1.5 : 1.75);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(ratio);
+    renderer.toneMapping = THREE.NeutralToneMapping;   // keeps the logo hues honest
+    renderer.toneMappingExposure = 1;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.autoUpdate = false;              // redrawn only while cubes move
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(DARK);
+    scene.fog = new THREE.Fog(DARK, 30, 70);
+
+    const camera = new THREE.PerspectiveCamera(34, 1, 1, 160);
+
+    // A faint cool bounce, so blues and plums survive the yellow light.
+    scene.add(new THREE.HemisphereLight(0x7F8CE0, 0x0C0806, 0.28));
+
+    const lightFrom = new THREE.Vector3(0, 40, -9);
+    const lightTo = new THREE.Vector3(0, 0, -2);
+    const spot = new THREE.SpotLight(LIGHT, 11000, 0, 0.36, 1, 2);
+    spot.position.copy(lightFrom);
+    spot.target.position.copy(lightTo);
+    spot.castShadow = true;
+    spot.shadow.mapSize.setScalar(coarse ? 1024 : 2048);
+    spot.shadow.camera.near = 14;
+    spot.shadow.camera.far = 80;
+    spot.shadow.bias = -0.0004;
+    spot.shadow.normalBias = 0.04;
+    spot.shadow.radius = 3;
+    scene.add(spot, spot.target);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(400, 400),
+      new THREE.MeshStandardMaterial({ color: 0x0B0806, roughness: 1 }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    /* ---------- the beam, and the dust caught in it ---------- */
+
+    const beamLength = lightFrom.distanceTo(lightTo);
+    const beamSpread = Math.tan(spot.angle) * beamLength * 0.8;
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, beamSpread, beamLength, 64, 1, true),
+      new THREE.ShaderMaterial({
+        uniforms: { uColor: { value: new THREE.Color(LIGHT) }, uStrength: { value: 0.35 } },
+        vertexShader: `
+          varying float vHeight;
+          varying vec3 vNormal;
+          varying vec3 vView;
+          void main() {
+            vHeight = uv.y;
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            vNormal = normalize(normalMatrix * normal);
+            vView = normalize(-mv.xyz);
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform float uStrength;
+          varying float vHeight;
+          varying vec3 vNormal;
+          varying vec3 vView;
+          void main() {
+            float facing = pow(abs(dot(vNormal, vView)), 3.0);
+            float falloff = smoothstep(0.0, 0.9, vHeight);
+            gl_FragColor = vec4(uColor * facing * falloff * uStrength, 1.0);
+          }`,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    beam.position.copy(lightFrom).lerp(lightTo, 0.5);
+    beam.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      lightFrom.clone().sub(lightTo).normalize(),
+    );
+    scene.add(beam);
+
+    const DUST = coarse ? 120 : 260;
+    const dustPositions = new Float32Array(DUST * 3);
+    const dustSeeds = new Float32Array(DUST);
+    const along = new THREE.Vector3();
+    for (let i = 0; i < DUST; i++) {
+      const t = 0.45 + Math.random() * 0.5;
+      const r = Math.sqrt(Math.random()) * beamSpread * t;
+      const a = Math.random() * Math.PI * 2;
+      along.copy(lightFrom).lerp(lightTo, t);
+      dustPositions.set([along.x + Math.cos(a) * r, along.y, along.z + Math.sin(a) * r], i * 3);
+      dustSeeds[i] = Math.random();
+    }
+    const dustGeometry = new THREE.BufferGeometry();
+    dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
+    dustGeometry.setAttribute("aSeed", new THREE.BufferAttribute(dustSeeds, 1));
+    const dust = new THREE.Points(dustGeometry, new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uScale: { value: ratio },
+        uColor: { value: new THREE.Color(0xFFE2A0) },
+      },
+      vertexShader: `
+        uniform float uTime;
+        uniform float uScale;
+        attribute float aSeed;
+        varying float vTwinkle;
+        void main() {
+          vec3 p = position + vec3(
+            sin(uTime * 0.21 + aSeed * 40.0) * 1.1,
+            sin(uTime * 0.13 + aSeed * 90.0) * 1.6,
+            cos(uTime * 0.17 + aSeed * 70.0) * 1.1);
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          vTwinkle = 0.35 + 0.65 * max(0.0, sin(uTime * (0.5 + aSeed) + aSeed * 30.0));
+          gl_PointSize = uScale * (2.0 + aSeed * 3.5) * (40.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        uniform vec3 uColor;
+        varying float vTwinkle;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          float a = smoothstep(0.5, 0.05, d);
+          gl_FragColor = vec4(uColor * a * a * vTwinkle, 1.0);
+        }`,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }));
+    dust.frustumCulled = false;
+    scene.add(dust);
+
+    /* ---------- framing: the pit always overfills the screen ---------- */
+
+    const ndc = new THREE.Vector2();
+    const ray = new THREE.Raycaster();
+    const hit = new THREE.Vector3();
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+    function aim(aspect) {
+      // Narrow screens pull back, so a phone still sees a crowd of cubes.
+      const distance = 30 * Math.sqrt(THREE.MathUtils.clamp(1 / aspect, 1, 2.2));
+      const tilt = THREE.MathUtils.degToRad(56);
+      camera.position.set(0, Math.sin(tilt) * distance, Math.cos(tilt) * distance);
+      camera.lookAt(0, 0, 0);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+      scene.fog.near = distance * 1.05;
+      scene.fog.far = distance * 2.3;
+    }
+
+    function project(x, y, height, out = hit) {
+      ndc.set(x, y);
+      ray.setFromCamera(ndc, camera);
+      plane.constant = -height;
+      return ray.ray.intersectPlane(plane, out);
+    }
+
+    // The screen's footprint on the floor is a trapezoid: wide far away, narrow up close.
+    const shape = { top: 0, bottom: 0, topLeft: 0, topRight: 0, bottomLeft: 0, bottomRight: 0 };
+
+    function measure(margin) {
+      const far = project(-1, 1, 0, new THREE.Vector3());
+      const near = project(-1, -1, 0, new THREE.Vector3());
+      if (!far || !near) return false;
+      shape.top = far.z - margin;
+      shape.bottom = near.z + margin;
+      shape.topLeft = far.x - margin;
+      shape.topRight = -far.x + margin;
+      shape.bottomLeft = near.x - margin;
+      shape.bottomRight = -near.x + margin;
+      return true;
+    }
+
+    const area = () =>
+      ((shape.topRight - shape.topLeft) + (shape.bottomRight - shape.bottomLeft)) / 2 *
+      (shape.bottom - shape.top);
+
+    /* ---------- physics ---------- */
+
+    const world = new RAPIER.World({ x: 0, y: GRAVITY, z: 0 });
+    world.timestep = STEP;
+    world.createCollider(RAPIER.ColliderDesc.cuboid(200, 1, 200).setTranslation(0, -1, 0));
+
+    const wall = () => world.createCollider(RAPIER.ColliderDesc.cuboid(1, 40, 200));
+    const walls = { left: wall(), right: wall(), back: wall(), front: wall() };
+
+    function stand(collider, ax, az, bx, bz, side) {
+      const angle = Math.atan2(bx - ax, bz - az);
+      const nx = Math.cos(angle) * side;
+      const nz = -Math.sin(angle) * side;
+      collider.setRotation({ x: 0, y: Math.sin(angle / 2), z: 0, w: Math.cos(angle / 2) });
+      collider.setTranslation({ x: (ax + bx) / 2 + nx, y: 40, z: (az + bz) / 2 + nz });
+    }
+
+    function build() {
+      stand(walls.left, shape.topLeft, shape.top, shape.bottomLeft, shape.bottom, -1);
+      stand(walls.right, shape.topRight, shape.top, shape.bottomRight, shape.bottom, 1);
+      stand(walls.back, -100, shape.top, 100, shape.top, 1);
+      stand(walls.front, -100, shape.bottom, 100, shape.bottom, -1);
+    }
+
+    let size = 0;                    // edge of one cube, fixed on first layout
+    const bodies = [];
+    const settled = [];              // whether a sleeping body's matrix is already drawn
+
+    const cubes = new THREE.InstancedMesh(
+      new RoundedBoxGeometry(1, 1, 1, 2, 0.14),
+      new THREE.MeshPhysicalMaterial({ roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.3 }),
+      CAPACITY,
+    );
+    cubes.count = 0;
+    cubes.castShadow = true;
+    cubes.receiveShadow = true;
+    cubes.frustumCulled = false;
+    scene.add(cubes);
+
+    const hand = world.createRigidBody(
+      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, HAND_UP, 0));
+    const handAt = new THREE.Vector3(0, HAND_UP, 0);
+    const handGoal = handAt.clone();
+
+    const tint = new THREE.Color();
+    const spin = new THREE.Euler();
+    const turn = new THREE.Quaternion();
+
+    function slots(gap) {
+      const list = [];
+      const rows = Math.max(1, Math.floor((shape.bottom - shape.top) / gap));
+      for (let r = 0; r < rows; r++) {
+        const v = (r + 0.5) / rows;
+        const z = shape.top + v * (shape.bottom - shape.top);
+        const left = shape.topLeft + v * (shape.bottomLeft - shape.topLeft);
+        const right = shape.topRight + v * (shape.bottomRight - shape.topRight);
+        const cols = Math.max(1, Math.floor((right - left) / gap));
+        for (let c = 0; c < cols; c++) list.push([left + (c + 0.5) * ((right - left) / cols), z]);
+      }
+      return list;
+    }
+
+    function pour(total) {
+      const gap = size * 1.2;
+      const grid = slots(gap);
+      const first = bodies.length;
+      const floorY = first ? size * 4 : 0;   // later batches land on the existing pile
+      let queue = [];
+
+      for (let i = first; i < total; i++) {
+        if (queue.length === 0) {
+          queue = grid.slice();
+          for (let c = queue.length - 1; c > 0; c--) {
+            const j = Math.floor(Math.random() * (c + 1));
+            [queue[c], queue[j]] = [queue[j], queue[c]];
+          }
+        }
+        const layer = Math.floor((i - first) / grid.length);
+        const [x, z] = queue.pop();
+        const y = floorY + size * 4 + layer * gap * 1.4 + Math.random() * size * 0.3;
+        const jitter = () => (Math.random() - 0.5) * (gap - size);
+
+        spin.set(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28);
+        turn.setFromEuler(spin);
+
+        const body = world.createRigidBody(
+          RAPIER.RigidBodyDesc.dynamic()
+            .setTranslation(x + jitter(), y, z + jitter())
+            .setRotation({ x: turn.x, y: turn.y, z: turn.z, w: turn.w })
+            .setLinvel((Math.random() - 0.5) * 2, -4 - Math.random() * 4, (Math.random() - 0.5) * 2)
+            .setAngvel({ x: Math.random() * 4 - 2, y: Math.random() * 4 - 2, z: Math.random() * 4 - 2 }));
+        world.createCollider(
+          RAPIER.ColliderDesc.cuboid(size / 2, size / 2, size / 2).setFriction(0.6).setRestitution(0.18),
+          body);
+
+        bodies.push(body);
+        settled.push(false);
+        tint.set(PALETTE[i % PALETTE.length]).offsetHSL(0, 0, (Math.random() - 0.5) * 0.05);
+        cubes.setColorAt(i, tint);
+      }
+      cubes.count = bodies.length;
+      if (cubes.instanceColor) cubes.instanceColor.needsUpdate = true;
+    }
+
+    function layout() {
+      const width = pit.clientWidth;
+      const height = pit.clientHeight;
+      if (!width || !height) return;
+      renderer.setSize(width, height, false);
+      aim(width / height);
+
+      if (!size) {
+        // Pick the cube size so a pile LAYERS deep fits the budget.
+        if (!measure(0)) return;
+        size = Math.max(1.1, Math.sqrt((area() * LAYERS) / CAPACITY));
+        world.createCollider(RAPIER.ColliderDesc.ball(size * 1.25), hand);
+      }
+
+      if (!measure(size * 1.2)) return;
+      build();
+      const wanted = Math.min(CAPACITY, Math.ceil((area() / (size * size)) * LAYERS));
+      if (wanted > bodies.length) pour(wanted);
+      dirty = true;
+    }
+
+    /* ---------- drawing ---------- */
+
+    const matrix = new THREE.Matrix4();
+    const place = new THREE.Vector3();
+    const facing = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+
+    function sync() {
+      let moving = false;
+      scale.setScalar(size);
+      for (let i = 0; i < bodies.length; i++) {
+        const body = bodies[i];
+        const asleep = body.isSleeping();
+        if (asleep && settled[i]) continue;
+        const t = body.translation();
+        const r = body.rotation();
+        place.set(t.x, t.y, t.z);
+        facing.set(r.x, r.y, r.z, r.w);
+        cubes.setMatrixAt(i, matrix.compose(place, facing, scale));
+        settled[i] = asleep;
+        moving = true;
+      }
+      if (moving) {
+        cubes.instanceMatrix.needsUpdate = true;
+        renderer.shadowMap.needsUpdate = true;
+      }
+      return moving;
+    }
+
+    const handWas = new THREE.Vector3();
+
+    function moveHand() {
+      if (handAt.y > HAND_UP / 2 && handGoal.y < HAND_UP / 2) {
+        // Coming back into the pit: drop straight down where the cursor is.
+        handAt.x = handGoal.x;
+        handAt.z = handGoal.z;
+      }
+      handWas.copy(handAt);
+      handAt.lerp(handGoal, 0.28);
+      hand.setNextKinematicTranslation(handAt);
+      // A resting cursor leaves the pile alone, so it can fall asleep again.
+      if (handAt.y > HAND_UP / 2 || handAt.distanceToSquared(handWas) < 1e-4) return;
+      const reach = size * 2.6;
+      for (const body of bodies) {
+        if (!body.isSleeping()) continue;
+        const t = body.translation();
+        if (Math.abs(t.x - handAt.x) < reach && Math.abs(t.z - handAt.z) < reach) body.wakeUp();
+      }
+    }
+
+    let dirty = true;
+    let frame = 0;
+    let last = 0;
+    let lag = 0;
+    let sampleFrom = 0;
+    let sampled = 0;
+    let skip = false;
+
+    function draw(now) {
+      dust.material.uniforms.uTime.value = now / 1000;
+      renderer.render(scene, camera);
+      dirty = false;
+      pit.classList.add("ready");
+    }
+
+    // Drop the resolution a notch at a time if the GPU can't keep up.
+    function pace(now) {
+      if (now < sampleFrom) return;
+      sampled++;
+      if (now - sampleFrom < 1500) return;
+      const fps = (sampled * 1000) / (now - sampleFrom);
+      if (fps < 45 && ratio > 1) {
+        ratio = Math.max(1, ratio - 0.25);
+        renderer.setPixelRatio(ratio);
+        renderer.setSize(pit.clientWidth, pit.clientHeight, false);
+        dust.material.uniforms.uScale.value = ratio;
+      }
+      sampleFrom = now;
+      sampled = 0;
+    }
+
+    function tick(now) {
+      frame = 0;
+      if (!running()) return;
+      lag = Math.min(lag + (now - last) / 1000, STEP * 4);
+      last = now;
+      while (lag >= STEP) {
+        moveHand();
+        world.step();
+        lag -= STEP;
+      }
+      // Once the pile is still, only the dust moves: half the frames will do.
+      skip = !skip;
+      if (sync() || !skip) draw(now);
+      pace(now);
+      frame = requestAnimationFrame(tick);
+    }
+
+    let covered = false;
+    const running = () => !reduce && !covered && !document.hidden;
+
+    function wake() {
+      if (reduce) {
+        if (dirty && !covered) draw(0);
+        return;
+      }
+      if (!frame && running()) {
+        last = performance.now();
+        sampleFrom = last + 2000;   // let the pour finish before judging speed
+        sampled = 0;
+        frame = requestAnimationFrame(tick);
+      }
+    }
+
+    /* ---------- page 2 slides over the pit ---------- */
+
+    let scrollQueued = false;
+    function onScroll() {
+      scrollQueued = false;
+      const progress = THREE.MathUtils.clamp(scrollY / (pit.offsetHeight || 1), 0, 1);
+      pit.style.setProperty("--cover", progress.toFixed(3));
+      if ((progress >= 1) !== covered) {
+        covered = progress >= 1;
+        pit.classList.toggle("covered", covered);
+        wake();
+      }
+    }
+    addEventListener("scroll", () => {
+      if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(onScroll); }
+    }, { passive: true });
+    document.addEventListener("visibilitychange", wake);
+
+    /* ---------- wading and splashing ---------- */
+
+    function pointAt(event, height) {
+      const rect = canvas.getBoundingClientRect();
+      return project(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+        height);
+    }
+
+    if (!reduce) {
+      pit.addEventListener("pointermove", (event) => {
+        if (event.pointerType !== "mouse" || !size) return;
+        const p = pointAt(event, size * 1.6);
+        if (!p) return;
+        handGoal.set(p.x, size * 1.6, p.z);
+      });
+
+      pit.addEventListener("pointerleave", () => { handGoal.y = HAND_UP; });
+
+      pit.addEventListener("click", (event) => {
+        if (event.target.closest("a") || !size) return;
+        const p = pointAt(event, size * 2);
+        if (!p) return;
+        const radius = size * 4.5;
+        for (const body of bodies) {
+          const t = body.translation();
+          const dx = t.x - p.x;
+          const dz = t.z - p.z;
+          const d = Math.hypot(dx, dz);
+          if (d > radius) continue;
+          const push = 1 - d / radius;
+          const m = body.mass();
+          const out = (7 * push * m) / (d || 1);
+          const twist = () => (Math.random() - 0.5) * 14 * push;
+          body.applyImpulse({ x: dx * out, y: (12 + Math.random() * 9) * push * m, z: dz * out }, true);
+          body.setAngvel({ x: twist(), y: twist(), z: twist() }, true);
+        }
+        pit.classList.add("touched");
+      });
+    }
+
+    /* ---------- go ---------- */
+
+    // Reduced motion: settle the pile unseen, a few steps per frame, then show a still.
+    function settle(steps) {
+      return new Promise((done) => {
+        const chunk = () => {
+          for (let i = 0; i < 40 && steps > 0; i++, steps--) world.step();
+          if (steps > 0) requestAnimationFrame(chunk);
+          else { sync(); dirty = true; done(); }
+        };
+        chunk();
+      });
+    }
+
+    layout();
+    onScroll();
+    if (reduce) await settle(400);
+
+    let resizeQueued = false;
+    new ResizeObserver(() => {
+      if (resizeQueued) return;
+      resizeQueued = true;
+      requestAnimationFrame(async () => {
+        resizeQueued = false;
+        layout();
+        if (reduce) await settle(300);
+        else if (running()) draw(performance.now());   // resizing clears the canvas
+        wake();
+      });
+    }).observe(pit);
+
+    wake();
+  }
 </script>
 
 </body>
