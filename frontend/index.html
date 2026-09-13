@@ -814,7 +814,8 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
 </script>
 
 <script type="module">
-  // Page 1: painted wooden cubes scattered across a slate floor, seen from straight
+  // Page 1: the jasem wordmark spelled in painted wooden cubes, more scattered around it
+  // on a slate floor, seen from straight
   // above under a warm spotlight. Without WebGL (or the CDN) it stays a dark room.
 
   const pit = document.querySelector(".pit");
@@ -1056,80 +1057,161 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
       return ray.ray.intersectPlane(ground, new THREE.Vector3());
     }
 
+    /* ---------- the wordmark, spelled in cubes in the middle of the floor ---------- */
+
+    // The logo's tiles row by row, exactly as in logo.svg; each letter names a colour.
+    const WORDMARK = [
+      "ORP.GOR.BGO.PBG.RPBGO",
+      "..P.G.R.B...P...R.B.O",
+      "..B.ORP.GOR.BGO.P.G.R",
+      "R.B.O.P...R.B...P...R",
+      "PBG.R.B.ORP.GOR.B...P",
+    ];
+    const INK = { O: "#E07B39", R: "#C44E3B", P: "#8A4B6B", G: "#D8A657", B: "#5A6DA8" };
+    // Wordmark cubes are set down by hand: each strays up to NUDGE cube edges from its place
+    // and turns up to TWIST radians (about 7°). PITCH leaves just enough room that a cube left
+    // exactly in place can never bump a neighbour that strayed as far as it may.
+    const PITCH = 1.16;
+    const NUDGE = 0.08;
+    const TWIST = 0.12;
+    const MARGIN = 2.6;              // scattered cubes keep this far from the word, in cube edges
+
     /* ---------- scattering: random spots, never touching, never shading each other ---------- */
 
-    let size = 0;                    // edge of one cube, fixed on first layout
-    let spacing = 0;                 // closest two cube centres may be
-    const spots = [];                // [x, z] of every cube on the floor
-    const cells = new Map();
+    let size = 0;                    // edge of a scattered cube, fixed on first layout
+    let spacing = 0;                 // grid cell for neighbour lookups
+    let tile = 0;                    // edge of a wordmark cube: the scatter's, unless the screen is narrow
+    const spots = [];                // [x, z] of every scattered cube
+    const cells = new Map();         // every cube as [x, z, edge, inWord]
 
     const key = (i, j) => `${i},${j}`;
 
     // Whether cube B stands in cube A's shadow. The shadow runs along the floor away from
     // the light, as far as the light's angle throws A's top edge, and is treated as a strip
     // wide enough for both cubes turned any which way.
-    function shades(ax, az, bx, bz) {
+    function shades(ax, az, aEdge, bx, bz, bEdge) {
       const lx = ax - spot.position.x;
       const lz = az - spot.position.z;
       const reach = Math.hypot(lx, lz);
-      const length = (reach * size) / (spot.position.y - size);
+      const length = (reach * aEdge) / (spot.position.y - aEdge);
       const along = ((bx - ax) * lx + (bz - az) * lz) / reach;
       const across = Math.abs((bx - ax) * lz - (bz - az) * lx) / reach;
-      const half = size * 0.72;   // half a cube's diagonal
-      return along > -half && along < length + 2 * half && across < 2 * half;
+      const halves = (aEdge + bEdge) * 0.72;   // half of each cube's diagonal
+      return along > -aEdge * 0.72 && along < length + halves && across < halves;
     }
 
-    // Room for a cube: not touching another, and neither one in the other's shadow,
-    // so every lit face stays lit.
+    // Room for a scattered cube: a little way off every wordmark cube, so the open floor
+    // around the word follows the letters; not touching another cube; and neither one in
+    // the other's shadow, so every lit face stays lit.
     function free(x, z) {
       const i = Math.floor(x / spacing);
       const j = Math.floor(z / spacing);
       for (let di = -3; di <= 3; di++) {
         for (let dj = -3; dj <= 3; dj++) {
-          for (const [ox, oz] of cells.get(key(i + di, j + dj)) ?? []) {
-            if ((ox - x) ** 2 + (oz - z) ** 2 < spacing * spacing) return false;
-            if (shades(ox, oz, x, z) || shades(x, z, ox, oz)) return false;
+          for (const [ox, oz, edge, inWord] of cells.get(key(i + di, j + dj)) ?? []) {
+            const apart = inWord ? size * MARGIN : (size + edge) * 0.775;   // 0.775: wider than both diagonals
+            if ((ox - x) ** 2 + (oz - z) ** 2 < apart * apart) return false;
+            if (shades(ox, oz, edge, x, z, size) || shades(x, z, size, ox, oz, edge)) return false;
           }
         }
       }
       return true;
     }
 
-    function claim(x, z) {
+    function claim(x, z, edge, inWord = false) {
       const k = key(Math.floor(x / spacing), Math.floor(z / spacing));
       if (!cells.has(k)) cells.set(k, []);
-      cells.get(k).push([x, z]);
-      spots.push([x, z]);
+      cells.get(k).push([x, z, edge, inWord]);
+    }
+
+    // Whether two equal squares of half-edge h, centred at (ax, az) and (bx, bz) and turned
+    // by ta and tb, come within `gap` of each other on the floor (separating axis test).
+    function bump(ax, az, ta, bx, bz, tb, h, gap) {
+      for (const t of [ta, ta + Math.PI / 2, tb, tb + Math.PI / 2]) {
+        const extent = (u) => h * (Math.abs(Math.cos(u - t)) + Math.abs(Math.sin(u - t)));
+        const apart = Math.abs((bx - ax) * Math.cos(t) + (bz - az) * Math.sin(t));
+        if (apart >= extent(ta) + extent(tb) + gap) return false;
+      }
+      return true;
+    }
+
+    // Lay the wordmark out in the middle of the floor, each tile its logo colour, every cube
+    // nudged and turned a little at random without bumping the ones already down.
+    function spell() {
+      const cols = WORDMARK[0].length;
+      const rows = WORDMARK.length;
+      const step = tile * PITCH;
+      const left = -((cols - 1) * step) / 2;
+      const top = -((rows - 1) * step) / 2;
+      const down = [];
+      WORDMARK.forEach((row, r) => [...row].forEach((ink, c) => {
+        if (ink === ".") return;
+        const homeX = left + c * step;
+        const homeZ = top + r * step;
+        let place = [homeX, homeZ, 0];   // the fallback, which always fits
+        for (let attempt = 0; attempt < 12; attempt++) {
+          const sway = 0.85 ** attempt;   // settle for a smaller stray each time one bumps
+          const x = homeX + (Math.random() * 2 - 1) * NUDGE * tile * sway;
+          const z = homeZ + (Math.random() * 2 - 1) * NUDGE * tile * sway;
+          const yaw = (Math.random() * 2 - 1) * TWIST * sway;
+          if (!down.some(([dx, dz, dyaw]) => bump(dx, dz, dyaw, x, z, yaw, tile / 2, tile * 0.02))) {
+            place = [x, z, yaw];
+            break;
+          }
+        }
+        down.push(place);
+        claim(place[0], place[1], tile, true);
+        drop(place[0], place[1], tile, place[2], INK[ink]);
+      }));
     }
 
     let litFrom = null;              // where the light stood when the cubes were placed
 
-    // Top up the visible floor (plus a margin) to COVERAGE, keeping what is already there.
-    // If the light has moved (a phone turned on its side), start over, so no cube is left
-    // standing in another's shadow.
+    // The largest wordmark cube that keeps the word within the screen, between corners a and b.
+    function wordmarkFit(a, b) {
+      return Math.min(
+        ((b.x - a.x) * 0.88) / (WORDMARK[0].length * PITCH),
+        ((b.z - a.z) * 0.4) / (WORDMARK.length * PITCH),
+      );
+    }
+
+    // Spell the wordmark, then top up the rest of the visible floor (plus a margin) to
+    // COVERAGE, keeping what is already there. If the light has moved (a phone turned on
+    // its side) or the wordmark no longer fits, start over.
     function scatter() {
       const a = project(-1, 1);
       const b = project(1, -1);
       if (!a || !b) return false;
-      if (litFrom && !litFrom.equals(spot.position)) {
+      const fit = Math.min(size, wordmarkFit(a, b));   // the same cubes as the scatter, if the word fits
+      const moved = litFrom && !litFrom.equals(spot.position);
+      if (moved || (tile && Math.abs(fit - tile) > fit * 0.02)) {
         spots.length = 0;
         cells.clear();
         cubes.count = 0;
         contacts.count = 0;
+        tile = 0;
       }
       litFrom = spot.position.clone();
+
+      let added = false;
+      if (!tile) {
+        tile = fit;
+        spell();
+        added = true;
+      }
+
       const minX = a.x - size, maxX = b.x + size;
       const minZ = a.z - size, maxZ = b.z + size;
       const already = spots.filter(([x, z]) => x > minX && x < maxX && z > minZ && z < maxZ).length;
       let wanted = Math.round(((maxX - minX) * (maxZ - minZ) * COVERAGE) / (size * size)) - already;
       let tries = wanted * 40;
-      let added = false;
       while (wanted > 0 && tries-- > 0 && cubes.count < CAPACITY) {
         const x = minX + Math.random() * (maxX - minX);
         const z = minZ + Math.random() * (maxZ - minZ);
         if (!free(x, z)) continue;
-        claim(x, z);
-        drop(x, z);
+        claim(x, z, size);
+        spots.push([x, z]);
+        drop(x, z, size, Math.random() * Math.PI * 2, PALETTE[Math.floor(Math.random() * PALETTE.length)]);
         wanted--;
         added = true;
       }
@@ -1180,16 +1262,15 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
     const scale = new THREE.Vector3();
     const tint = new THREE.Color();
 
-    // A cube resting flat on the floor, turned any which way.
-    function drop(x, z) {
+    // A cube of the given edge resting flat on the floor, turned by `yaw`.
+    function drop(x, z, edge, yaw, colour) {
       const i = cubes.count++;
-      at.set(x, size * 0.47, z);   // sunk a hair, so no light slips under the rounded bottom edges
-      turn.setFromAxisAngle(up, Math.random() * Math.PI * 2);
-      cubes.setMatrixAt(i, matrix.compose(at, turn, scale.setScalar(size)));
-      contacts.setMatrixAt(i, matrix.compose(at.setY(0), turn, scale.setScalar(size * CONTACT)));
+      at.set(x, edge * 0.47, z);   // sunk a hair, so no light slips under the rounded bottom edges
+      turn.setFromAxisAngle(up, yaw);
+      cubes.setMatrixAt(i, matrix.compose(at, turn, scale.setScalar(edge)));
+      contacts.setMatrixAt(i, matrix.compose(at.setY(0), turn, scale.setScalar(edge * CONTACT)));
       contacts.count = cubes.count;
-      tint.set(PALETTE[Math.floor(Math.random() * PALETTE.length)])
-        .offsetHSL(0, 0, (Math.random() - 0.5) * 0.05);
+      tint.set(colour).offsetHSL(0, 0, (Math.random() - 0.5) * 0.05);
       cubes.setColorAt(i, tint);
     }
 
@@ -1205,7 +1286,10 @@ python manage.py runserver 127.0.0.1:8000</code></pre>
         const b = project(1, -1);
         if (!a || !b) return;
         size = (CUBE_PX * ((b.z - a.z) / height)) / DISTANCE;
-        spacing = size * 1.55;     // wider than a cube's diagonal, so turned cubes never overlap
+        // On a narrow screen the wordmark shrinks to fit; shrink the scatter with it,
+        // so every cube on the floor is the same size.
+        size = Math.min(size, wordmarkFit(a, b));
+        spacing = size * 1.55;
       }
 
       if (scatter()) {
