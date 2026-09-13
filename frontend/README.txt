@@ -1,1 +1,1 @@
-The landing page moved to docs/index.html, where GitHub Pages serves it.
+Frontend should be implemented here, api doc is backend/openapi.yaml.
