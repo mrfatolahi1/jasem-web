@@ -716,7 +716,9 @@ Task lists
 
     /* ---------- renderer, camera, lights ---------- */
 
-    let ratio = Math.min(devicePixelRatio, 2);   // full sharpness on retina screens; pace() backs off if slow
+    // The screen's full sharpness: phones are often 3×, and a small cube drawn at less looks soft.
+    const sharpest = Math.min(devicePixelRatio, 3);
+    let ratio = sharpest;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     renderer.setPixelRatio(ratio);
     renderer.toneMapping = THREE.NeutralToneMapping;   // keeps the logo hues honest
@@ -830,7 +832,7 @@ Task lists
 
     /* ---------- dust drifting in the light ---------- */
 
-    const DUST = coarse ? 30 : 60;
+    const DUST = coarse ? 0 : 60;   // a phone keeps still between scrolls, and still dust looks like grit
     const dustPositions = new Float32Array(DUST * 3);
     const dustSeeds = new Float32Array(DUST);
     const dustPlaces = Array.from({ length: DUST }, () =>
@@ -1227,8 +1229,9 @@ Task lists
 
     let pending = 0;
     let skip = false;
-    let sampleFrom = 0;
-    let sampled = 0;
+    let movedAt = -Infinity;         // when the camera last walked
+    let frames = 0;
+    let since = 0;
 
     function draw(now) {
       dust.material.uniforms.uTime.value = now / 1000;
@@ -1246,61 +1249,68 @@ Task lists
       return true;
     }
 
-    // Drop the resolution a notch at a time if the GPU can't keep up.
-    function pace(now) {
-      sampled++;
-      if (now - sampleFrom < 2000) return;
-      if ((sampled * 1000) / (now - sampleFrom) < 45 && ratio > 1) {
-        ratio = Math.max(1, ratio - 0.25);
-        renderer.setPixelRatio(ratio);
-        renderer.setSize(room.clientWidth, room.clientHeight, false);
-        dust.material.uniforms.uScale.value = ratio;
-      }
-      sampleFrom = now;
-      sampled = 0;
+    function resolve(next) {
+      ratio = next;
+      renderer.setPixelRatio(ratio);
+      renderer.setSize(room.clientWidth, room.clientHeight, false);
+      dust.material.uniforms.uScale.value = ratio;
     }
 
-    // Every frame while the page scrolls; otherwise only the dust moves, so every other frame.
+    // While scrolling, drop the resolution a notch if the GPU can't keep up; `fresh` starts a
+    // new gesture. Once the page settles it goes back to full sharpness, so a still page is
+    // never soft.
+    function pace(now, fresh) {
+      if (fresh) {
+        frames = 0;
+        since = now;
+        return;
+      }
+      if (++frames < 20) return;
+      const fps = (frames * 1000) / (now - since);
+      frames = 0;
+      since = now;
+      if (fps < 45 && ratio > 1) resolve(Math.max(1, ratio - 0.5));
+    }
+
+    // Every frame while the page scrolls. At rest, a desktop redraws every other frame for
+    // the drifting dust; a phone, which has none, stops the loop until the next scroll.
     function tick(now) {
       pending = 0;
       if (document.hidden) return;
-      skip = !skip;
-      if (walk() || !skip) draw(now);
-      pace(now);
+      if (walk()) {
+        pace(now, now - movedAt > 150);
+        movedAt = now;
+        draw(now);
+      } else if (ratio < sharpest && now - movedAt > 200) {
+        resolve(sharpest);
+        draw(now);
+      } else if (DUST) {
+        skip = !skip;
+        if (skip) draw(now);
+      } else if (now - movedAt > 200) {
+        return;
+      }
       pending = requestAnimationFrame(tick);
     }
 
     function wake() {
       if (document.hidden) return;
       if (reduce) {
-        walk();
-        draw(0);
+        // No running loop: one still frame per scroll step.
+        if (!pending) pending = requestAnimationFrame((now) => { pending = 0; walk(); draw(now); });
       } else if (!pending) {
-        sampleFrom = performance.now();
-        sampled = 0;
         pending = requestAnimationFrame(tick);
       }
     }
 
+    addEventListener("scroll", wake, { passive: true });
     document.addEventListener("visibilitychange", wake);
-
-    // With motion reduced there is no running loop: redraw only when the page scrolls.
-    if (reduce) {
-      let queued = false;
-      addEventListener("scroll", () => {
-        if (queued) return;
-        queued = true;
-        requestAnimationFrame(() => {
-          queued = false;
-          if (walk()) draw(0);
-        });
-      }, { passive: true });
-    }
 
     /* ---------- go ---------- */
 
     layout();
     walk();
+    draw(performance.now());
     wake();
 
     let resizeQueued = false;
