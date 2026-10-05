@@ -71,14 +71,6 @@ def _payload(request):
     return body
 
 
-def _text(body):
-    """Return the required free-text field of a capture request."""
-    text = str(body.get("text", "")).strip()
-    if not text:
-        raise ApiError("text is required")
-    return text
-
-
 def api(handler):
     """Wrap a view so an :class:`ApiError` becomes its JSON error response."""
     def wrapped(request, *args, **kwargs):
@@ -92,10 +84,20 @@ def api(handler):
 
 
 def _tags(request):
-    """Return the repeated ``tag`` filters of a task query."""
-    return request.GET.getlist("tag") or (
-        [request.GET["tags"]] if request.GET.get("tags") else []
-    )
+    """Return the ``tag`` filters of a task view; each may hold several (``work,home``)."""
+    return request.GET.getlist("tag") + request.GET.getlist("tags")
+
+
+def _tag(request):
+    """Return the one-category filter of a time or spending list or report."""
+    return request.GET.get("tag") or request.GET.get("tags")
+
+
+def _list_result(service, result):
+    """Encode a ``done``/``rm`` result: the list it acted on and the tasks it touched."""
+    return {key: [service._task_json(task) for task in value]
+            if key in ("tasks", "unchanged") else value
+            for key, value in result.items()}
 
 
 # --------------------------------------------------------------- meta & docs
@@ -150,7 +152,7 @@ def help_reference(request):
 @api
 @require_http_methods(["GET"])
 def configuration(request):
-    """``jasem help`` files & config — provider, model, files, and calendar."""
+    """``jasem help`` files & config — files, list, calendar, and accent."""
     return JsonResponse(_service().configuration())
 
 
@@ -180,7 +182,7 @@ def dashboard(request):
 @api
 @require_http_methods(["GET", "POST"])
 def tasks(request):
-    """``jasem todo`` views, and ``jasem todo "<text>"`` to capture one."""
+    """``jasem todo`` views, and ``jasem todo "<title>" [options]`` to add one."""
     service = _service()
     if request.method == "GET":
         selected = request.GET.get("list")
@@ -191,11 +193,11 @@ def tasks(request):
             "tasks": [service._task_json(task) for task in found],
         })
     body = _payload(request)
-    task, created_list = service.add_task(_text(body), body.get("list"))
+    list_name = body.pop("list", None)
+    task, created_list = service.add_task(body, list_name)
     return JsonResponse({
         "task": service._task_json(task),
         "created_list": created_list,
-        "warnings": service.warnings,
     }, status=201)
 
 
@@ -244,8 +246,8 @@ def task_done(request):
     """``jasem todo done <id>…`` — complete (or reopen) several tasks at once."""
     service = _service()
     body = _payload(request)
-    changed = service.complete_tasks(body.get("ids"), body.get("done", True), body.get("list"))
-    return JsonResponse({"tasks": [service._task_json(task) for task in changed]})
+    result = service.complete_tasks(body.get("ids"), body.get("done", True), body.get("list"))
+    return JsonResponse(_list_result(service, result))
 
 
 @csrf_exempt
@@ -253,23 +255,24 @@ def task_done(request):
 @require_http_methods(["POST"])
 def task_delete(request):
     """``jasem todo rm <id>…`` — delete several tasks at once."""
+    service = _service()
     body = _payload(request)
-    removed = _service().delete_tasks(body.get("ids"), body.get("list"))
-    return JsonResponse({"deleted": removed})
+    result = service.delete_tasks(body.get("ids"), body.get("list"))
+    return JsonResponse({"deleted": len(result["tasks"]), **_list_result(service, result)})
 
 
 @csrf_exempt
 @api
 @require_http_methods(["PATCH", "DELETE"])
 def task_detail(request, task_id):
-    """``jasem todo set <id> …`` and ``jasem todo rm <id>``."""
+    """``jasem todo edit <id> [options]`` and ``jasem todo rm <id>``."""
     service = _service()
     selected = request.GET.get("list")
     if request.method == "DELETE":
-        service.delete_task(task_id, selected)
-        return JsonResponse({"deleted": 1})
+        result = service.delete_tasks([task_id], selected)
+        return JsonResponse({"deleted": len(result["tasks"]), **_list_result(service, result)})
     task = service.update_task(task_id, _payload(request), selected)
-    return JsonResponse({"task": service._task_json(task), "warnings": service.warnings})
+    return JsonResponse({"task": service._task_json(task)})
 
 
 # ----------------------------------------------------------------------- time
@@ -278,30 +281,27 @@ def task_detail(request, task_id):
 @api
 @require_http_methods(["GET", "POST"])
 def time_entries(request):
-    """``jasem track list`` and ``jasem track "<text>"``."""
+    """``jasem track list`` and ``jasem track <duration> "<work>" [options]``."""
     service = _service()
     if request.method == "GET":
         if request.GET.get("report") == "1":
             return JsonResponse(service.reports(
-                "time", request.GET.get("period", "week"), request.GET.get("tag")))
-        entries, label = service.time_list(
-            request.GET.get("period", "all"), request.GET.get("tag"))
+                "time", request.GET.get("period", "week"), _tag(request)))
+        entries, label = service.time_list(request.GET.get("period", "all"), _tag(request))
         return JsonResponse({
             "label": label,
             "entries": [service._time_json(entry) for entry in entries],
         })
-    entry = service.add_time(_text(_payload(request)))
-    return JsonResponse({"entry": service._time_json(entry),
-                         "warnings": service.warnings}, status=201)
+    entry = service.add_time(_payload(request))
+    return JsonResponse({"entry": service._time_json(entry)}, status=201)
 
 
 @api
 @require_http_methods(["GET"])
 def time_report(request):
-    """``jasem track report [period] [tag]`` — totals, by-tag, and timeline."""
+    """``jasem track report [period] [-t TAG]`` — totals, by-tag, and timeline."""
     service = _service()
-    return JsonResponse(service.reports(
-        "time", request.GET.get("period", "week"), request.GET.get("tag")))
+    return JsonResponse(service.reports("time", request.GET.get("period", "week"), _tag(request)))
 
 
 @api
@@ -324,13 +324,13 @@ def time_delete(request):
 @api
 @require_http_methods(["PATCH", "DELETE"])
 def time_detail(request, entry_id):
-    """``jasem track set <id> …`` and ``jasem track rm <id>``."""
+    """``jasem track edit <id> [options]`` and ``jasem track rm <id>``."""
     service = _service()
     if request.method == "DELETE":
         service.delete_time(entry_id)
         return JsonResponse({"deleted": 1})
     entry = service.update_time(entry_id, _payload(request))
-    return JsonResponse({"entry": service._time_json(entry), "warnings": service.warnings})
+    return JsonResponse({"entry": service._time_json(entry)})
 
 
 # ------------------------------------------------------------------- spending
@@ -339,30 +339,28 @@ def time_detail(request, entry_id):
 @api
 @require_http_methods(["GET", "POST"])
 def spending(request):
-    """``jasem acc list`` and ``jasem acc "<text>"``."""
+    """``jasem acc list`` and ``jasem acc <amount> "<title>" [options]``."""
     service = _service()
     if request.method == "GET":
         if request.GET.get("report") == "1":
             return JsonResponse(service.reports(
-                "spending", request.GET.get("period", "week"), request.GET.get("tag")))
-        records, label = service.spending_list(
-            request.GET.get("period", "all"), request.GET.get("tag"))
+                "spending", request.GET.get("period", "week"), _tag(request)))
+        records, label = service.spending_list(request.GET.get("period", "all"), _tag(request))
         return JsonResponse({
             "label": label,
             "records": [service._spending_json(record) for record in records],
         })
-    record = service.add_spending(_text(_payload(request)))
-    return JsonResponse({"record": service._spending_json(record),
-                         "warnings": service.warnings}, status=201)
+    record = service.add_spending(_payload(request))
+    return JsonResponse({"record": service._spending_json(record)}, status=201)
 
 
 @api
 @require_http_methods(["GET"])
 def spending_report(request):
-    """``jasem acc report [period] [tag]`` — totals, by-tag, and timeline."""
+    """``jasem acc report [period] [-t TAG]`` — totals, by-tag, and timeline."""
     service = _service()
     return JsonResponse(service.reports(
-        "spending", request.GET.get("period", "week"), request.GET.get("tag")))
+        "spending", request.GET.get("period", "week"), _tag(request)))
 
 
 @api
@@ -385,11 +383,10 @@ def spending_delete(request):
 @api
 @require_http_methods(["PATCH", "DELETE"])
 def spending_detail(request, record_id):
-    """``jasem acc set <id> …`` and ``jasem acc rm <id>``."""
+    """``jasem acc edit <id> [options]`` and ``jasem acc rm <id>``."""
     service = _service()
     if request.method == "DELETE":
         service.delete_spending(record_id)
         return JsonResponse({"deleted": 1})
     record = service.update_spending(record_id, _payload(request))
-    return JsonResponse({"record": service._spending_json(record),
-                         "warnings": service.warnings})
+    return JsonResponse({"record": service._spending_json(record)})

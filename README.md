@@ -2,7 +2,7 @@
 
 # Jasem Web
 
-A local web companion for the [`jasem`](https://github.com/mrfatolahi1/Jasem) CLI.
+A local web companion for the [`jasem`](https://github.com/mrfatolahi1/Jasem) CLI, version 2.
 It reads and writes the same Markdown files under `~/.jasem/`, so changes made
 here are visible to the CLI immediately, and vice versa.
 
@@ -30,6 +30,8 @@ Landing page at <http://127.0.0.1:8000/>, API at <http://127.0.0.1:8000/api/>, d
 The backend keeps no data of its own. It uses jasem's files —
 `~/.jasem/tasks.md`, `tasks-<list>.md`, `timelog.md`, `spending.md` — and
 jasem's environment variables: `JASEM_DIR`, `JASEM_FILE`, `JASEM_TRACK_FILE`,
-`JASEM_SPEND_FILE`, `JASEM_PROVIDER`, `JASEM_MODEL`, `JASEM_JALALI`.
+`JASEM_SPEND_FILE`, `JASEM_LIST`, `JASEM_JALALI`. Like jasem 2 it is fully
+offline; the old AI settings (`JASEM_PROVIDER`, `JASEM_MODEL`, `JASEM_API_KEY`,
+…) are ignored.
 
 Point `JASEM_DIR` at a temporary directory to try the API without touching real data.

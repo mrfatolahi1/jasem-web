@@ -2,12 +2,12 @@ openapi: 3.0.3
 
 info:
   title: Jasem Web API
-  version: "1.2.0"
+  version: "2.0.0"
   description: |
     HTTP access to every command of the [`jasem`](https://github.com/mrfatolahi1/Jasem)
-    CLI. The API is a thin layer over jasem's own domain objects, Markdown stores,
-    natural-language parsers, date resolver, and report builders — there is no
-    database, and every write lands immediately in the same files the CLI reads
+    CLI, version 2. The API is a thin layer over jasem's own domain objects,
+    Markdown stores, date resolver, and report builders — there is no database,
+    and every write lands immediately in the same files the CLI reads
     (`~/.jasem/tasks.md`, `tasks-<list>.md`, `timelog.md`, `spending.md`).
 
     Each operation carries an `x-jasem-command` field naming the CLI command it
@@ -20,10 +20,18 @@ info:
     - Dates are stored and returned as Gregorian ISO `YYYY-MM-DD`. Fields
       suffixed `_display` carry the same value rendered for the configured
       calendar (Jalali when `JASEM_JALALI` is set).
-    - Fields accepting a date also accept the phrases jasem understands —
-      `tomorrow`, `next friday`, `in 3 days`, `june 20`.
-    - Editing endpoints accept jasem's own field aliases (`p`, `due`, `c`, …);
-      `GET /api/help/` lists them.
+    - Like jasem 2, nothing is read out of free text: titles and work
+      descriptions are stored exactly as sent, and every other field is a key
+      of its own. Keys are the command's option names without their dashes
+      (`d`/`due`/`date`, `p`, `t`/`tag`, `n`/`note`, `title`, `time`, `work`,
+      `amount`) or the field names responses use; `GET /api/help/` lists them.
+      An unknown key is rejected.
+    - Dates accept what `-d` accepts: `today`, `tomorrow`, `yesterday`, `fri`,
+      `next fri`, `last mon`, `+3d`, `-2d`, `+2w`, `+1m`, `in 3 days`,
+      `june 20`, `2026-07-01`. Durations are `45m`, `1h30m`, `2h 15min`, or bare
+      minutes; amounts are `50000`, `50k`, `1.5m`, `1,200`.
+    - A value jasem cannot read is rejected with the message the CLI prints, and
+      nothing is saved — not even the other fields of the same request.
     - CSRF is exempt: the server is meant to run on the loopback interface.
 
   license:
@@ -96,7 +104,8 @@ paths:
       summary: Command reference
       description: |
         Every CLI command paired with the endpoint that performs it, plus the
-        accepted views, periods, priorities, clearing words, and field aliases.
+        accepted views, periods, priorities and their short forms, clearing
+        words, the keys each field accepts, and jasem's own option tables.
         `text` holds the help screen exactly as `jasem help` prints it.
       operationId: help
       x-jasem-command: jasem help
@@ -112,9 +121,8 @@ paths:
       tags: [Meta]
       summary: Resolved configuration
       description: |
-        The provider, model, file paths, active list, calendar, and accent that
-        jasem resolved from the environment — the `FILES & CONFIG` section of the
-        help screen. The API key is never returned, only whether one is set.
+        The file paths, active list, calendar, and accent that jasem resolved
+        from the environment — the `FILES & CONFIG` section of the help screen.
       operationId: configuration
       x-jasem-command: jasem help  (files & config)
       responses:
@@ -146,7 +154,7 @@ paths:
       tags: [Tasks]
       summary: List tasks
       operationId: listTasks
-      x-jasem-command: jasem todo [list|today|week|overdue|all] [category...]
+      x-jasem-command: jasem todo [list|today|week|overdue|all] [-t TAG]...
       parameters:
         - $ref: "#/components/parameters/TaskView"
         - $ref: "#/components/parameters/TagFilters"
@@ -168,28 +176,17 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       tags: [Tasks]
-      summary: Capture a task from natural language
+      summary: Add a task
       description: |
-        The deadline, priority, and tags are extracted by the configured AI
-        provider. When no backend is reachable the task is still saved, with the
-        date parsed by regex; any degradation is reported in `warnings`.
+        The title is stored exactly as sent; the deadline, priority, and tags
+        come from their own keys. A bad value adds nothing.
       operationId: addTask
-      x-jasem-command: jasem todo "<text>"
+      x-jasem-command: jasem todo "<title>" [-d DATE] [-p high|medium|low] [-t TAG]...
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [text]
-              properties:
-                text:
-                  type: string
-                  example: pay rent next friday, high priority, finance
-                list:
-                  type: string
-                  description: Name of the list to add to; omit for the active list.
-                  example: work
+            schema: { $ref: "#/components/schemas/TaskInput" }
       responses:
         "201":
           description: The stored task.
@@ -202,7 +199,6 @@ paths:
                   created_list:
                     type: boolean
                     description: Whether this task brought a new list into existence.
-                  warnings: { $ref: "#/components/schemas/Warnings" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /api/tasks/{task_id}/:
@@ -214,15 +210,14 @@ paths:
       - $ref: "#/components/parameters/ListSelector"
     patch:
       tags: [Tasks]
-      summary: Edit one field of a task
+      summary: Edit a task
       description: |
-        Send only the fields to change. `deadline` and `tags` are cleared by any
-        of the clearing words (`none`, `clear`, `-`, an empty string, …) that
-        `GET /api/help/` lists; jasem's own aliases (`p`, `due`, `c`, …) are
-        accepted as keys. An unknown field or an unusable value is rejected
-        rather than silently ignored.
+        Send only the fields to change; several can change at once. `deadline`
+        and `tags` are cleared by a clearing word (`none`, `clear`, `-`, …; a
+        deadline also by `someday` or `no deadline`). Every value is checked
+        before anything is saved, so one bad value leaves the task untouched.
       operationId: updateTask
-      x-jasem-command: jasem todo set <id> <priority|deadline|category> <value>
+      x-jasem-command: jasem todo edit <id> [--title "…"] [-d DATE] [-p PRIORITY] [-t TAG]...
       requestBody:
         required: true
         content:
@@ -237,7 +232,6 @@ paths:
                 type: object
                 properties:
                   task: { $ref: "#/components/schemas/Task" }
-                  warnings: { $ref: "#/components/schemas/Warnings" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -246,16 +240,21 @@ paths:
       operationId: deleteTask
       x-jasem-command: jasem todo rm <id>
       responses:
-        "200": { $ref: "#/components/responses/Deleted" }
+        "200": { $ref: "#/components/responses/TasksDeleted" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /api/tasks/done/:
     post:
       tags: [Tasks]
       summary: Complete or reopen tasks
-      description: "Marks every listed task complete, or reopens them with `done: false`."
+      description: |
+        Marks every listed task complete, or reopens them with `done: false`.
+        As in the CLI, every id must be a number, tasks already in that state are
+        returned in `unchanged` rather than changed, and ids with no task in the
+        list are returned in `missing`. It fails only when no id matched at all —
+        ids are numbered per list, so the request was probably meant for another.
       operationId: completeTasks
-      x-jasem-command: jasem todo done <id>...
+      x-jasem-command: jasem todo done <id>…
       requestBody:
         required: true
         content:
@@ -275,15 +274,10 @@ paths:
                 list: { type: string, example: work }
       responses:
         "200":
-          description: The tasks that changed.
+          description: What changed, what was already in that state, and what was not found.
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  tasks:
-                    type: array
-                    items: { $ref: "#/components/schemas/Task" }
+              schema: { $ref: "#/components/schemas/TasksCompleted" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -291,8 +285,11 @@ paths:
     post:
       tags: [Tasks]
       summary: Delete several tasks
+      description: |
+        Every id must be a number. Ids with no task in the list are returned in
+        `missing`; it fails only when no id matched at all.
       operationId: deleteTasks
-      x-jasem-command: jasem todo rm <id> [id...]
+      x-jasem-command: jasem todo rm <id>…
       requestBody:
         required: true
         content:
@@ -307,7 +304,7 @@ paths:
                   example: [3, 5]
                 list: { type: string, example: work }
       responses:
-        "200": { $ref: "#/components/responses/Deleted" }
+        "200": { $ref: "#/components/responses/TasksDeleted" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -378,7 +375,7 @@ paths:
       summary: Move tasks to another list
       description: Each moved task is given a fresh id in the target list, which is created if it does not exist.
       operationId: moveTasks
-      x-jasem-command: jasem todo move <id> [id...] <list>
+      x-jasem-command: jasem todo move <id>… <list>
       requestBody:
         required: true
         content:
@@ -419,7 +416,7 @@ paths:
       summary: List tracked time
       description: Pass `report=1` for the report payload of `/api/time/report/`.
       operationId: listTime
-      x-jasem-command: jasem track list [period] [tag]
+      x-jasem-command: jasem track list [period] [-t TAG]
       parameters:
         - $ref: "#/components/parameters/PeriodAll"
         - $ref: "#/components/parameters/TagFilter"
@@ -442,25 +439,18 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
     post:
       tags: [Time]
-      summary: Capture time from natural language
+      summary: Log time
       description: |
-        The duration, date, and tag are extracted by the configured AI provider,
-        falling back to the `<time>, <work>[, <date>][, <tag>]` comma format when
-        no backend is reachable. An unreadable duration is stored as written and
-        reported in `warnings`; it does not count toward report totals.
+        `time` must be a duration and nothing else; the work is stored exactly as
+        sent. The date defaults to today and the tag to `work`. An unreadable
+        duration or date is rejected and nothing is logged.
       operationId: addTime
-      x-jasem-command: jasem track "<text>"
+      x-jasem-command: jasem track <duration> "<work>" [-d DATE] [-t TAG]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [text]
-              properties:
-                text:
-                  type: string
-                  example: 1h30min code review, work
+            schema: { $ref: "#/components/schemas/TimeInput" }
       responses:
         "201":
           description: The stored entry.
@@ -470,7 +460,6 @@ paths:
                 type: object
                 properties:
                   entry: { $ref: "#/components/schemas/TimeEntry" }
-                  warnings: { $ref: "#/components/schemas/Warnings" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /api/time/{entry_id}/:
@@ -481,9 +470,12 @@ paths:
         schema: { type: integer }
     patch:
       tags: [Time]
-      summary: Edit one field of a time entry
+      summary: Edit a time entry
+      description: |
+        Send only the fields to change; several can change at once. Every value
+        is checked before anything is saved.
       operationId: updateTime
-      x-jasem-command: jasem track set <id> <time|work|date|tag> <value>
+      x-jasem-command: jasem track edit <id> [--time DURATION] [--work "…"] [-d DATE] [-t TAG]
       requestBody:
         required: true
         content:
@@ -498,7 +490,6 @@ paths:
                 type: object
                 properties:
                   entry: { $ref: "#/components/schemas/TimeEntry" }
-                  warnings: { $ref: "#/components/schemas/Warnings" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -514,8 +505,9 @@ paths:
     post:
       tags: [Time]
       summary: Delete several time entries
+      description: Ids that are not numbers are skipped, as `jasem track rm` skips them.
       operationId: deleteTimeEntries
-      x-jasem-command: jasem track rm <id> [id...]
+      x-jasem-command: jasem track rm <id>…
       requestBody:
         required: true
         content:
@@ -532,7 +524,7 @@ paths:
       summary: Time report
       description: Totals, per-tag breakdown, timeline, and top activities — the same calculations the CLI report renders.
       operationId: timeReport
-      x-jasem-command: jasem track report [period] [tag]
+      x-jasem-command: jasem track report [period] [-t TAG]
       parameters:
         - $ref: "#/components/parameters/PeriodWeek"
         - $ref: "#/components/parameters/TagFilter"
@@ -559,7 +551,7 @@ paths:
       summary: List spending records
       description: Pass `report=1` for the report payload of `/api/spending/report/`.
       operationId: listSpending
-      x-jasem-command: jasem acc list [period] [tag]
+      x-jasem-command: jasem acc list [period] [-t TAG]
       parameters:
         - $ref: "#/components/parameters/PeriodAll"
         - $ref: "#/components/parameters/TagFilter"
@@ -582,25 +574,18 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
     post:
       tags: [Spending]
-      summary: Capture spending from natural language
+      summary: Record spending
       description: |
-        The amount, date, and tag are extracted by the configured AI provider,
-        falling back to the `<amount>, <title>[, <date>][, <tag>]` comma format
-        when no backend is reachable. An unreadable amount is stored as written
-        and reported in `warnings`; it does not count toward report totals.
+        `amount` must be an amount and nothing else; the title is stored exactly
+        as sent. The date defaults to today and the tag to `general`. An
+        unreadable amount or date is rejected and nothing is recorded.
       operationId: addSpending
-      x-jasem-command: jasem acc "<text>"
+      x-jasem-command: jasem acc <amount> "<title>" [-n NOTE] [-d DATE] [-t TAG]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [text]
-              properties:
-                text:
-                  type: string
-                  example: 50k lunch with the team, food
+            schema: { $ref: "#/components/schemas/SpendingInput" }
       responses:
         "201":
           description: The stored record.
@@ -610,7 +595,6 @@ paths:
                 type: object
                 properties:
                   record: { $ref: "#/components/schemas/SpendingRecord" }
-                  warnings: { $ref: "#/components/schemas/Warnings" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /api/spending/{record_id}/:
@@ -621,9 +605,12 @@ paths:
         schema: { type: integer }
     patch:
       tags: [Spending]
-      summary: Edit one field of a spending record
+      summary: Edit a spending record
+      description: |
+        Send only the fields to change; several can change at once. Every value
+        is checked before anything is saved.
       operationId: updateSpending
-      x-jasem-command: jasem acc set <id> <amount|title|description|date|tag> <value>
+      x-jasem-command: jasem acc edit <id> [--amount A] [--title "…"] [-n NOTE] [-d DATE] [-t TAG]
       requestBody:
         required: true
         content:
@@ -638,7 +625,6 @@ paths:
                 type: object
                 properties:
                   record: { $ref: "#/components/schemas/SpendingRecord" }
-                  warnings: { $ref: "#/components/schemas/Warnings" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -654,8 +640,9 @@ paths:
     post:
       tags: [Spending]
       summary: Delete several spending records
+      description: Ids that are not numbers are skipped, as `jasem acc rm` skips them.
       operationId: deleteSpendingRecords
-      x-jasem-command: jasem acc rm <id> [id...]
+      x-jasem-command: jasem acc rm <id>…
       requestBody:
         required: true
         content:
@@ -672,7 +659,7 @@ paths:
       summary: Spending report
       description: Totals, per-tag breakdown, timeline, and top spends — the same calculations the CLI report renders.
       operationId: spendingReport
-      x-jasem-command: jasem acc report [period] [tag]
+      x-jasem-command: jasem acc report [period] [-t TAG]
       parameters:
         - $ref: "#/components/parameters/PeriodWeek"
         - $ref: "#/components/parameters/TagFilter"
@@ -709,7 +696,9 @@ components:
     TagFilters:
       name: tag
       in: query
-      description: Repeat to require several categories at once.
+      description: |
+        Keep tasks having every category given (`-t`). Repeat it or
+        comma-separate (`tag=work,urgent`); `tags` is accepted too.
       explode: true
       schema:
         type: array
@@ -719,7 +708,7 @@ components:
     TagFilter:
       name: tag
       in: query
-      description: Restrict to one category.
+      description: Restrict to one category (`-t`); `tags` is accepted too.
       schema: { type: string }
       example: work
 
@@ -771,6 +760,24 @@ components:
             properties:
               deleted: { type: integer, example: 2 }
 
+    TasksDeleted:
+      description: The tasks removed, the list they were in, and any ids not found.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              deleted: { type: integer, example: 2 }
+              list: { $ref: "#/components/schemas/ListRef" }
+              tasks:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+              missing:
+                type: array
+                description: Requested ids with no task in this list.
+                items: { type: integer }
+                example: [9]
+
     TagCounts:
       description: Each category in use, most frequent first.
       content:
@@ -789,14 +796,7 @@ components:
       properties:
         error:
           type: string
-          example: "priority must be one of: high, medium, low"
-
-    Warnings:
-      type: array
-      description: |
-        What jasem would have printed to stderr — an unreachable AI backend, or a
-        duration or amount it could not read. Empty on a clean run.
-      items: { type: string }
+          example: "unknown priority: 'urgent'; use high · medium · low  (or h · m · l)"
 
     IdList:
       type: object
@@ -840,28 +840,80 @@ components:
         created: { type: string, example: "2026-06-20" }
         created_display: { type: string, example: "1405-03-30" }
 
+    TaskInput:
+      type: object
+      required: [title]
+      description: |
+        The options of `jasem todo "<title>"`. Keys may also be spelled as the
+        CLI options without dashes — `d`/`due`/`date` for `deadline`, `p` for
+        `priority`, `t`/`tag`/`category` for `tags`.
+      properties:
+        title:
+          type: string
+          description: Stored exactly as sent; nothing is read out of it.
+          example: pay rent
+        deadline:
+          type: string
+          description: A date `-d` accepts; a clearing word, `someday`, or `no deadline` leaves it empty.
+          example: fri
+        priority:
+          type: string
+          description: "`high`, `medium` (the default), or `low` — or `h`, `m`/`med`, `l`."
+          example: high
+        tags:
+          description: A list, or a comma/space separated string; each item may hold several (`work,urgent`).
+          oneOf:
+            - type: array
+              items: { type: string }
+            - type: string
+          example: [finance]
+        list:
+          type: string
+          description: Name of the list to add to; omit for the active list.
+          example: work
+
     TaskPatch:
       type: object
       minProperties: 1
       description: |
-        Any subset of the editable fields. jasem's aliases are also accepted as
-        keys — `priority`/`prio`/`p`, `deadline`/`due`/`date`/`d`,
-        `tags`/`category`/`categories`/`c`.
+        The options of `jasem todo edit <id>` — any subset of the fields, with
+        the same keys as `TaskInput` (`d`, `p`, `t`, …) — plus `done`.
       properties:
         done: { type: boolean }
         title: { type: string, example: pay the rent }
-        priority: { type: string, enum: [high, medium, low] }
+        priority:
+          type: string
+          description: "`high`, `medium`, or `low` — or `h`, `m`/`med`, `l`. It cannot be cleared."
+          example: low
         deadline:
           type: string
-          description: A date or a phrase jasem understands; a clearing word empties it.
+          description: A date `-d` accepts; a clearing word, `someday`, or `no deadline` empties it.
           example: next friday
         tags:
-          description: A list of categories, or a comma/space separated string; a clearing word empties it.
+          description: Replaces the whole set. A list, or a comma/space separated string; a clearing word empties it.
           oneOf:
             - type: array
               items: { type: string }
             - type: string
           example: [work, finance]
+
+    TasksCompleted:
+      type: object
+      properties:
+        list: { $ref: "#/components/schemas/ListRef" }
+        tasks:
+          type: array
+          description: The tasks that changed.
+          items: { $ref: "#/components/schemas/Task" }
+        unchanged:
+          type: array
+          description: Tasks that were already in the requested state — the CLI's "already done".
+          items: { $ref: "#/components/schemas/Task" }
+        missing:
+          type: array
+          description: Requested ids with no task in this list.
+          items: { type: integer }
+          example: [9]
 
     TaskList:
       type: object
@@ -892,31 +944,58 @@ components:
           example: 1h 30min
         time_display:
           type: string
-          description: The normalised duration, or the raw text when unreadable.
+          description: The normalised duration, or the raw text of a hand-edited row jasem cannot read.
           example: 1h 30min
         minutes:
           type: integer
-          description: The duration in whole minutes; 0 when unreadable.
+          description: The duration in whole minutes; 0 for a hand-edited row jasem cannot read.
           example: 90
         work: { type: string, example: code review }
         tag: { type: string, example: work }
+
+    TimeInput:
+      type: object
+      required: [time, work]
+      description: |
+        `jasem track <duration> "<work>"` and its options. `d` and `t` are
+        accepted for `date` and `tag`; `time_text` and `minutes` for `time`.
+      properties:
+        time:
+          description: A duration and nothing else — `45m`, `1h30m`, `2h 15min`, `1.5h`, or bare minutes. Stored as `1h 30min`.
+          oneOf:
+            - type: string
+            - type: number
+          example: 1h30m
+        work:
+          type: string
+          description: Stored exactly as sent.
+          example: code review
+        date:
+          type: string
+          description: A date `-d` accepts; defaults to today. It cannot be cleared.
+          example: yesterday
+        tag:
+          type: string
+          description: Defaults to `work`; a clearing word resets it to `work`.
+          example: work
 
     TimePatch:
       type: object
       minProperties: 1
       description: |
-        Any subset of the editable fields. jasem's aliases are also accepted as
-        keys — `time`/`duration`/`dur`/`t`, `work`/`desc`/`description`/`w`,
-        `date`/`day`/`d`, `tag`/`category`/`categories`/`c`.
+        The options of `jasem track edit <id>` — any subset of the fields, with
+        the same keys as `TimeInput`.
       properties:
-        time_text:
-          type: string
-          description: A duration such as `2h`, `90`, or `1h 30min`. Unreadable text is stored as written.
-          example: 1h30min
+        time:
+          description: A duration and nothing else; an unreadable one is rejected.
+          oneOf:
+            - type: string
+            - type: number
+          example: 1h30m
         work: { type: string, example: reviewing the PR }
         date:
           type: string
-          description: A date or a phrase jasem understands.
+          description: A date `-d` accepts.
           example: yesterday
         tag:
           type: string
@@ -935,37 +1014,71 @@ components:
           example: "50,000"
         amount_display:
           type: string
-          description: The formatted amount, or the raw text when unreadable.
+          description: The formatted amount, or the raw text of a hand-edited row jasem cannot read.
           example: "50,000"
         amount:
           type: number
-          description: The numeric amount; 0 when unreadable.
+          description: The numeric amount; 0 for a hand-edited row jasem cannot read.
           example: 50000
         title: { type: string, example: lunch with the team }
-        description: { type: string, example: quarterly celebration }
+        description:
+          type: string
+          description: The longer note (`-n`).
+          example: quarterly celebration
         tag: { type: string, example: food }
+
+    SpendingInput:
+      type: object
+      required: [amount, title]
+      description: |
+        `jasem acc <amount> "<title>"` and its options. `n`/`note` are accepted
+        for `description`, `d` and `t` for `date` and `tag`, and `amount_text`
+        for `amount`.
+      properties:
+        amount:
+          description: An amount and nothing else — `50000`, `50k`, `1.5m`, `1,200`. Stored as `50,000`.
+          oneOf:
+            - type: string
+            - type: number
+          example: 50k
+        title:
+          type: string
+          description: Stored exactly as sent.
+          example: lunch with the team
+        description:
+          type: string
+          description: A longer note (`-n`).
+          example: team celebration
+        date:
+          type: string
+          description: A date `-d` accepts; defaults to today. It cannot be cleared.
+          example: yesterday
+        tag:
+          type: string
+          description: Defaults to `general`; a clearing word resets it to `general`.
+          example: food
 
     SpendingPatch:
       type: object
       minProperties: 1
       description: |
-        Any subset of the editable fields. jasem's aliases are also accepted as
-        keys — `amount`/`amt`/`cost`/`price`/`a`, `title`/`text`/`name`/`t`,
-        `description`/`desc`/`note`/`notes`/`details`, `date`/`day`/`d`,
-        `tag`/`category`/`categories`/`c`.
+        The options of `jasem acc edit <id>` — any subset of the fields, with
+        the same keys as `SpendingInput`.
       properties:
-        amount_text:
-          type: string
-          description: An amount such as `60k`, `1.5m`, or `1,200`. Unreadable text is stored as written.
+        amount:
+          description: An amount and nothing else; an unreadable one is rejected.
+          oneOf:
+            - type: string
+            - type: number
           example: 60k
         title: { type: string, example: dinner out }
         description:
           type: string
-          description: A clearing word empties it.
+          description: The note (`-n`); a clearing word empties it.
           example: team celebration
         date:
           type: string
-          description: A date or a phrase jasem understands.
+          description: A date `-d` accepts.
           example: yesterday
         tag:
           type: string
@@ -1099,7 +1212,7 @@ components:
       type: object
       properties:
         service: { type: string, example: jasem-web }
-        jasem_version: { type: string, example: 1.2.0 }
+        jasem_version: { type: string, example: 2.0.0 }
         docs:
           type: object
           properties:
@@ -1115,7 +1228,7 @@ components:
       type: object
       properties:
         service: { type: string, example: jasem-web }
-        jasem_version: { type: string, example: 1.2.0 }
+        jasem_version: { type: string, example: 2.0.0 }
         description: { type: string }
         repository: { type: string, format: uri }
         wiki: { type: string, format: uri }
@@ -1129,20 +1242,6 @@ components:
     Configuration:
       type: object
       properties:
-        provider: { type: string, enum: [ollama, openai, anthropic], example: ollama }
-        providers:
-          type: array
-          items: { type: string }
-        model: { type: string, example: qwen2.5:3b }
-        default_models:
-          type: object
-          additionalProperties: { type: string }
-        api_key_set:
-          type: boolean
-          description: Whether a key is configured. The key itself is never returned.
-        api_base: { type: string, example: "" }
-        openai_api_base: { type: string, example: "" }
-        ollama_host: { type: string, example: "http://localhost:11434" }
         directory: { type: string, example: /home/you/.jasem }
         task_file:
           type: string
@@ -1190,14 +1289,41 @@ components:
         priorities:
           type: array
           items: { type: string }
+        priority_aliases:
+          type: object
+          description: Short spellings `-p` accepts.
+          additionalProperties: { type: string }
+          example: { h: high, m: medium, med: medium, l: low }
         clear_words:
           type: array
-          description: Values that empty a field on an edit.
+          description: Values that empty a field (or reset a tag to its default).
+          items: { type: string }
+        deadline_clear_words:
+          type: array
+          description: Values that leave a task without a deadline — the clearing words plus `someday`, `no deadline`, ….
           items: { type: string }
         fields:
           type: object
-          description: Accepted aliases per editable field, per namespace.
+          description: The keys each field accepts in request bodies, per namespace.
           properties:
             task: { type: object, additionalProperties: { type: array, items: { type: string } } }
             time: { type: object, additionalProperties: { type: array, items: { type: string } } }
             spending: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        options:
+          type: object
+          description: jasem's own option tables — each CLI option spelling mapped to the field it sets.
+          properties:
+            todo: { $ref: "#/components/schemas/OptionTables" }
+            track: { $ref: "#/components/schemas/OptionTables" }
+            acc: { $ref: "#/components/schemas/OptionTables" }
+
+    OptionTables:
+      type: object
+      properties:
+        add:
+          type: object
+          additionalProperties: { type: string }
+          example: { "-d": deadline, "--due": deadline, "-p": priority, "-t": category }
+        edit:
+          type: object
+          additionalProperties: { type: string }

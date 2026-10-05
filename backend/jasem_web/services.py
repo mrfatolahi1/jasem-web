@@ -1,9 +1,14 @@
 """Adapter exposing every jasem CLI capability over HTTP.
 
 One :class:`WebService` is built per request. It owns no state of its own: it
-constructs jasem's config, calendar, stores, parsers, and report builders and
-delegates to them, so the web app and the CLI always read and write the same
+constructs jasem's config, calendar, stores, date resolver, and report builders
+and delegates to them, so the web app and the CLI always read and write the same
 Markdown files with the same rules.
+
+jasem 2 never reads fields out of free text: the text is stored as typed and
+every other field is set with an option (``-d``, ``-p``, ``-t``, ``-n``, …). The
+API mirrors that — a JSON key is one of the command's option names without its
+dashes, and a value jasem cannot read is refused with nothing saved.
 """
 
 import datetime as dt
@@ -12,122 +17,135 @@ import re
 from dataclasses import asdict
 
 from jasem.application.app import (
+    ACC_ADD_USAGE,
+    ACC_EDIT_USAGE,
     CLEAR_WORDS,
-    FIELD_ALIASES,
     PERIODS,
-    SPEND_FIELD_ALIASES,
-    TIME_FIELD_ALIASES,
+    PRIORITY_ALIASES,
+    SPEND_EDIT_FLAGS,
+    SPEND_FLAGS,
+    TASK_EDIT_FLAGS,
+    TASK_FLAGS,
+    TIME_EDIT_FLAGS,
+    TIME_FLAGS,
+    TODO_ADD_USAGE,
+    TODO_EDIT_USAGE,
+    TRACK_ADD_USAGE,
+    TRACK_EDIT_USAGE,
+    VIEW_NAMES,
     previous_window,
-    resolve_field,
-    resolve_spend_field,
-    resolve_time_field,
     resolve_window,
 )
-from jasem.application.parsing import SpendingParser, TaskParser, TimeEntryParser
 from jasem.application.reports import build_report, build_spending_report
 from jasem.domain.spending import Spending
 from jasem.domain.task import PRIORITY_RANK, Task
 from jasem.domain.time_entry import TimeEntry
-from jasem.infrastructure.providers import get_provider
 from jasem.infrastructure.storage import SpendingStore, TaskStore, TimeLogStore, task_lists
 from jasem.interface.help import render_help
 from jasem.interface.logo import DESCRIPTION, REPO_URL, WIKI_URL, render_version, render_welcome
-from jasem.shared.amounts import format_amount, parse_amount
+from jasem.shared.amounts import format_amount, parse_exact_amount
 from jasem.shared.calendar_view import CalendarView
 from jasem.shared.charts import sparkline
-from jasem.shared.config import DEFAULT_MODELS, Config
+from jasem.shared.config import Config
 from jasem.shared.console import Console
-from jasem.shared.dates import DateResolver
-from jasem.shared.durations import format_minutes, parse_minutes
+from jasem.shared.dates import NO_DATE, DateResolver
+from jasem.shared.durations import format_minutes, parse_exact_minutes
 
 FOCUS_LIMIT = 7
 """Most tasks the dashboard focus list returns, matching jasem's home screen."""
 
-PROVIDERS = ("ollama", "openai", "anthropic")
-"""AI backends ``JASEM_PROVIDER`` accepts."""
-
 ENVIRONMENT_VARIABLES = (
-    "JASEM_DIR", "JASEM_FILE", "JASEM_LIST", "JASEM_TRACK_FILE", "JASEM_SPEND_FILE",
-    "JASEM_PROVIDER", "JASEM_MODEL", "JASEM_API_KEY", "JASEM_API_BASE",
-    "JASEM_OPENAI_API_BASE", "OPENAI_BASE_URL", "OLLAMA_HOST",
-    "JASEM_JALALI", "JASEM_ACCENT", "NO_COLOR", "FORCE_COLOR",
+    "JASEM_DIR", "JASEM_FILE", "JASEM_TRACK_FILE", "JASEM_SPEND_FILE",
+    "JASEM_LIST", "JASEM_JALALI", "JASEM_ACCENT", "NO_COLOR", "FORCE_COLOR",
 )
 """Every variable jasem reads, as listed on its help screen."""
 
-VIEWS = {
-    "open": "list", "list": "list", "ls": "list",
-    "today": "today", "week": "week", "overdue": "overdue", "all": "all",
-}
-"""Task views the API accepts, mapped to jasem's own view names."""
+VIEWS = {**{name: name for name in VIEW_NAMES}, "ls": "list", "open": "list"}
+"""Task views the API accepts — jasem's own, plus ``open`` — mapped to the view shown."""
 
-TASK_EXTRA_FIELDS = {"done": "done", "title": "title"}
-"""Task fields the API edits that ``jasem todo set`` has no syntax for."""
+DURATION_HINT = "45m · 1h · 1h30m · 2h 15min · 90"
+"""The durations jasem suggests when it cannot read one."""
 
-TIME_EXTRA_FIELDS = {"time_text": "time", "minutes": "time"}
-"""Canonical time-entry keys accepted alongside jasem's own field aliases."""
+AMOUNT_HINT = "50000 · 50k · 1.5m · 1,200"
+"""The amounts jasem suggests when it cannot read one."""
 
-SPEND_EXTRA_FIELDS = {"amount_text": "amount"}
-"""Canonical spending keys accepted alongside jasem's own field aliases."""
+
+def _option_keys(flags):
+    """Map each option of a jasem flag table, without its dashes, to its field.
+
+    ``-d``/``--due`` become the keys ``d``/``due``. The field names themselves
+    (``deadline``, ``category``, ``description``) are accepted too.
+    """
+    keys = {flag.lstrip("-"): field for flag, field in flags.items()}
+    keys.update({field: field for field in flags.values()})
+    return keys
+
+
+TASK_FIELDS = _option_keys(TASK_EDIT_FLAGS)
+"""Keys of a task body: ``jasem todo edit``'s options, which add's options plus ``--title``."""
+
+TIME_FIELDS = {**_option_keys(TIME_EDIT_FLAGS), "time_text": "time", "minutes": "time"}
+"""Keys of a time-entry body: ``jasem track edit``'s options, plus the stored field names."""
+
+SPEND_FIELDS = {**_option_keys(SPEND_EDIT_FLAGS), "amount_text": "amount"}
+"""Keys of a spending body: ``jasem acc edit``'s options, plus the stored field name."""
+
+TASK_EDIT_FIELDS = {**TASK_FIELDS, "done": "done"}
+"""Keys of a task edit: the add keys, plus completion, which ``jasem todo done`` sets."""
 
 COMMAND_REFERENCE = (
     ("todo", "Tasks", (
-        ('jasem todo "<text>"', "add a task; deadline, priority & tags auto-detected",
+        (TODO_ADD_USAGE, "add a task", "POST", "/api/tasks/"),
+        ('jasem todo add "<title>" [options]', "add a title that starts with a command word",
          "POST", "/api/tasks/"),
-        ('jasem todo add "<text>"', "force-add text that starts with a command word",
-         "POST", "/api/tasks/"),
-        ("jasem todo  ·  jasem todo list [category...]", "open tasks, soonest deadline first",
-         "GET", "/api/tasks/?view=open&tag=<category>"),
+        ("jasem todo  ·  jasem todo list [-t TAG]...", "open tasks, soonest deadline first",
+         "GET", "/api/tasks/?view=open&tag=<tag>"),
         ("jasem todo today", "due today", "GET", "/api/tasks/?view=today"),
         ("jasem todo week", "due within the next 7 days", "GET", "/api/tasks/?view=week"),
         ("jasem todo overdue", "past deadline, not done", "GET", "/api/tasks/?view=overdue"),
         ("jasem todo all", "everything, including completed", "GET", "/api/tasks/?view=all"),
         ("jasem todo tags", "categories in use, with counts", "GET", "/api/tasks/tags/"),
-        ('jasem todo find "..."', "search task titles & tags", "GET", "/api/tasks/find/?q=<text>"),
-        ("jasem todo done <id>...", "mark task(s) complete", "POST", "/api/tasks/done/"),
+        ('jasem todo find "…"', "search task titles & tags", "GET", "/api/tasks/find/?q=<text>"),
+        ("jasem todo done <id>…", "mark task(s) complete", "POST", "/api/tasks/done/"),
         ("jasem todo rm <id>", "delete one task", "DELETE", "/api/tasks/<id>/"),
-        ("jasem todo rm <id>...", "delete task(s) permanently", "POST", "/api/tasks/delete/"),
-        ("jasem todo set <id> <field> <value>", "edit priority, deadline, or category",
-         "PATCH", "/api/tasks/<id>/"),
+        ("jasem todo rm <id>…", "delete task(s) permanently", "POST", "/api/tasks/delete/"),
+        (TODO_EDIT_USAGE, "change fields", "PATCH", "/api/tasks/<id>/"),
     )),
     ("lists", "Task lists", (
-        ("jasem todo @<list> ...", "run any task call against a named list",
-         "*", "/api/tasks/...?list=<name>"),
+        ("jasem todo @<list> …", "run any todo command against a named list",
+         "*", "/api/tasks/…?list=<name>"),
+        ("jasem todo @default", "the unnamed list", "*", "/api/tasks/…?list=default"),
         ("jasem todo lists", "every list, with open counts", "GET", "/api/tasks/lists/"),
-        ("jasem todo move <id>... <list>", "move task(s) to another list",
+        ("jasem todo move <id>… <list>", "move task(s) to another list",
          "POST", "/api/tasks/move/"),
     )),
     ("track", "Time", (
-        ('jasem track "<text>"', "log time; duration, date & tag auto-detected",
-         "POST", "/api/time/"),
-        ("jasem track list [period] [tag]", "logged entries",
+        (TRACK_ADD_USAGE, "log time", "POST", "/api/time/"),
+        ("jasem track list [period] [-t TAG]", "logged entries",
          "GET", "/api/time/?period=all&tag=<tag>"),
         ("jasem track tags", "categories in use, with counts", "GET", "/api/time/tags/"),
-        ("jasem track report [period] [tag]", "totals, by-tag, timeline & top activities",
+        ("jasem track report [period] [-t TAG]", "totals, by-tag, timeline & top activities",
          "GET", "/api/time/report/?period=week&tag=<tag>"),
         ("jasem track rm <id>", "delete one entry", "DELETE", "/api/time/<id>/"),
-        ("jasem track rm <id>...", "delete tracked entries", "POST", "/api/time/delete/"),
-        ("jasem track set <id> <field> <value>", "edit time, work, date, or tag",
-         "PATCH", "/api/time/<id>/"),
+        ("jasem track rm <id>…", "delete tracked entries", "POST", "/api/time/delete/"),
+        (TRACK_EDIT_USAGE, "change fields", "PATCH", "/api/time/<id>/"),
     )),
     ("acc", "Spending", (
-        ('jasem acc "<text>"', "record spending; amount, date & tag auto-detected",
-         "POST", "/api/spending/"),
-        ("jasem acc list [period] [tag]", "recorded spending",
+        (ACC_ADD_USAGE, "record spending", "POST", "/api/spending/"),
+        ("jasem acc list [period] [-t TAG]", "recorded spending",
          "GET", "/api/spending/?period=all&tag=<tag>"),
         ("jasem acc tags", "categories in use, with counts", "GET", "/api/spending/tags/"),
-        ("jasem acc report [period] [tag]", "totals, by-tag, timeline & top spends",
+        ("jasem acc report [period] [-t TAG]", "totals, by-tag, timeline & top spends",
          "GET", "/api/spending/report/?period=week&tag=<tag>"),
         ("jasem acc rm <id>", "delete one record", "DELETE", "/api/spending/<id>/"),
-        ("jasem acc rm <id>...", "delete spending record(s)", "POST", "/api/spending/delete/"),
-        ("jasem acc set <id> <field> <value>", "edit amount, title, description, date, or tag",
-         "PATCH", "/api/spending/<id>/"),
+        ("jasem acc rm <id>…", "delete spending record(s)", "POST", "/api/spending/delete/"),
+        (ACC_EDIT_USAGE, "change fields", "PATCH", "/api/spending/<id>/"),
     )),
     ("more", "More", (
         ("jasem  (no args)", "focus tasks and today's activity", "GET", "/api/dashboard/"),
         ("jasem --help", "the command reference", "GET", "/api/help/"),
-        ("jasem --version", "version and project links", "GET", "/api/meta/"),
-        ("jasem help  (files & config)", "provider, model, files, calendar, accent",
-         "GET", "/api/config/"),
+        ("jasem --version", "logo, version & project link", "GET", "/api/meta/"),
+        ("jasem help  (files & config)", "files, list, calendar, accent", "GET", "/api/config/"),
     )),
 )
 """Every CLI command, paired with the API call that performs it."""
@@ -144,20 +162,48 @@ class ApiError(Exception):
 
 
 class CaptureConsole(Console):
-    """Console that collects jasem's output instead of writing to a terminal."""
+    """Console that renders jasem's screens to a string instead of a terminal."""
 
     def __init__(self):
         """Write to an in-memory stream with color disabled."""
         super().__init__(stream=io.StringIO(), env={"NO_COLOR": "1"})
-        self.warnings = []
 
-    def warn(self, text):
-        """Record a warning that the CLI would have printed to stderr."""
-        self.warnings.append(text.strip())
+
+def _text(value):
+    """Return a JSON value as the CLI would receive it: a string."""
+    return "" if value is None else str(value)
+
+
+def _words(values):
+    """Return the tags in ``values``, each of which may hold several (``work,home``)."""
+    return [word for value in values for word in re.split(r"[,\s]+", value) if word]
+
+
+def _fields(payload, keys):
+    """Return ``payload`` as ``{field: value}`` in the order the fields first appear.
+
+    Several keys may name one field (``d``, ``due``); like a repeated option, the
+    last value wins. A key jasem has no option for is refused.
+    """
+    fields = {}
+    for key, value in payload.items():
+        field = keys.get(str(key).strip().lower())
+        if field is None:
+            raise ApiError(f"unknown field: {key}; use " + " · ".join(sorted(keys)))
+        fields[field] = value
+    return fields
+
+
+def _aliases(keys):
+    """Return ``{field: [keys…]}`` — every key accepted for each field."""
+    aliases = {}
+    for key, field in keys.items():
+        aliases.setdefault(field, []).append(key)
+    return {field: sorted(names) for field, names in aliases.items()}
 
 
 class WebService:
-    """Thin adapter around jasem's domain, parsers, stores, and reports."""
+    """Thin adapter around jasem's domain, stores, date resolver, and reports."""
 
     def __init__(self):
         self.config = Config()
@@ -168,11 +214,6 @@ class WebService:
         self.tasks = self._task_store(self.list_name)
         self.timelog = TimeLogStore(self.config.track_file)
         self.spending_store = SpendingStore(self.config.spend_file)
-
-    @property
-    def warnings(self):
-        """Return the warnings jasem raised while handling this request."""
-        return list(self.console.warnings)
 
     # ------------------------------------------------------------------ setup
 
@@ -201,14 +242,9 @@ class WebService:
             raise ApiError(f"no list named {name!r}; a list is created by its first task", 404)
         return store
 
-    def _task_parser(self):
-        return TaskParser(get_provider, self.config, self.dates, self.console)
-
-    def _time_parser(self):
-        return TimeEntryParser(get_provider, self.config, self.dates, self.console)
-
-    def _spending_parser(self):
-        return SpendingParser(get_provider, self.config, self.dates, self.console)
+    @staticmethod
+    def _list_ref(name):
+        return {"name": name, "label": task_lists.label(name)}
 
     # ------------------------------------------------------------ serializing
 
@@ -255,26 +291,32 @@ class WebService:
         return period
 
     @staticmethod
-    def _ids(values):
-        """Return the numeric ids in ``values``, as jasem's commands parse them."""
+    def _ids(values, noun=None):
+        """Return the numeric ids in ``values``, read the way jasem reads them.
+
+        ``jasem todo done``/``rm`` refuse an argument that is not an id, so a typo
+        cannot act on fewer tasks than intended — pass ``noun`` for that.
+        ``move``, ``track rm`` and ``acc rm`` skip such arguments instead.
+        """
         identifiers = set()
-        for value in values or []:
+        for value in values if isinstance(values, (list, tuple)) else [values]:
             try:
-                identifiers.add(int(value))
-            except (TypeError, ValueError):
-                continue
+                identifiers.add(int(_text(value).strip()))
+            except ValueError:
+                if noun:
+                    raise ApiError(f"not a {noun} id: {value}") from None
         if not identifiers:
             raise ApiError("at least one numeric id is required")
         return identifiers
 
-    @staticmethod
-    def _words(value):
-        """Split a tag/category value written as a list or a free-text string."""
-        if isinstance(value, (list, tuple)):
-            parts = [str(item).strip() for item in value]
-        else:
-            parts = re.split(r"[,\s]+", str(value or "").strip())
-        return [part for part in parts if part]
+    def _read_date(self, value, what="date"):
+        """Return ``value`` as an ISO date, refusing it as ``-d`` does."""
+        resolved = self.dates.resolve(value, dt.date.today())
+        if not resolved:
+            example = self.calendar.format_iso("2026-07-01")
+            raise ApiError(f"could not understand {what}: {value!r}; try: today · tomorrow · "
+                           f"fri · next fri · last mon · +3d · -2d · june 20 · {example}")
+        return resolved
 
     # ------------------------------------------------------------------ tasks
 
@@ -291,100 +333,127 @@ class WebService:
             "all": lambda task: True,
         }
         selected = [task for task in store.load() if predicates[name](task)]
-        filters = [str(tag).strip().lower() for tag in (tags or []) if str(tag).strip()]
+        filters = [tag.lower() for tag in _words(tags or [])]
         if filters:
             selected = [task for task in selected
                         if all(tag in task.tag_list() for tag in filters)]
         selected.sort(key=lambda task: task.sort_key())
         return selected
 
-    def add_task(self, text, list_name=None):
+    def add_task(self, payload, list_name=None):
+        """Add a task from its title and options, as ``jasem todo "<title>"`` does."""
         store = self._store_for(list_name)
+        fields = _fields(payload, TASK_FIELDS)
+        if not _text(fields.get("title")).strip():
+            raise ApiError("a task needs a title")
+        task = Task(created=dt.date.today().isoformat())
+        for field, value in fields.items():
+            self._apply_task_field(task, field, value)
         fresh = bool(store.name) and not store.exists()
         tasks = store.load()
-        task = Task(**self._task_parser().parse(text, dt.date.today()))
         task.id = store.next_id(tasks)
         tasks.append(task)
         store.save(tasks)
         return task, fresh
 
     def update_task(self, task_id, payload, list_name=None):
+        """Change any fields of a task, as ``jasem todo edit <id>`` does.
+
+        Every value is checked before anything is saved, so one bad value leaves
+        the task untouched on disk.
+        """
         store = self._store_for(list_name, must_exist=True)
+        fields = _fields(payload, TASK_EDIT_FIELDS)
+        if not fields:
+            raise ApiError("nothing to change")
         tasks = store.load()
         task = next((item for item in tasks if item.id == task_id), None)
         if task is None:
             raise ApiError(f"no task with id #{task_id}", 404)
-        if not payload:
-            raise ApiError("at least one field is required")
-        for key, value in payload.items():
-            field = resolve_field(key) or TASK_EXTRA_FIELDS.get(str(key).lower())
-            if not field:
-                raise ApiError(f"unknown field: {key}; "
-                               "fields: priority · deadline · category · title · done")
+        for field, value in fields.items():
             self._apply_task_field(task, field, value)
         store.save(tasks)
         return task
 
     def _apply_task_field(self, task, field, value):
-        """Apply one edit to ``task``, using jasem's own rules for each field."""
+        """Apply one value to ``task``, using jasem's own rules for each field."""
         if field == "done":
             task.done = bool(value)
             return
+        if field == "category":
+            values = [_text(item) for item in (value if isinstance(value, (list, tuple))
+                                               else [value])]
+            if len(values) == 1 and values[0].strip().lower() in CLEAR_WORDS:
+                task.tags = ""
+            else:
+                task.tags = ", ".join(_words(values))
+            return
+        text = _text(value)
         if field == "title":
-            title = str(value or "").strip()
-            if not title:
-                raise ApiError("title cannot be empty")
-            task.title = title
-            return
-        if field == "priority":
-            priority = str(value or "").strip().lower()
+            if not text.strip():
+                raise ApiError("a task needs a title")
+            task.title = text.strip()
+        elif field == "priority":
+            lowered = text.strip().lower()
+            priority = PRIORITY_ALIASES.get(lowered, lowered)
             if priority not in PRIORITY_RANK:
-                raise ApiError("priority must be one of: " + ", ".join(PRIORITY_RANK))
+                raise ApiError(f"unknown priority: {text!r}; "
+                               "use high · medium · low  (or h · m · l)")
             task.priority = priority
-            return
-        if field == "deadline":
-            text = str(value or "").strip()
-            if text.lower() in CLEAR_WORDS:
-                task.deadline = ""
-                return
-            resolved = self.dates.resolve(text, dt.date.today())
-            if not resolved:
-                raise ApiError(f"could not understand deadline: {text!r}; "
-                               "try: tomorrow · next friday · in 3 days · 2026-07-01 · none")
-            task.deadline = resolved
-            return
-        if not isinstance(value, (list, tuple)) and str(value or "").strip().lower() in CLEAR_WORDS:
-            task.tags = ""
-            return
-        task.tags = ", ".join(self._words(value))
+        elif text.strip().lower() in CLEAR_WORDS | NO_DATE:
+            task.deadline = ""
+        else:
+            task.deadline = self._read_date(text, "deadline")
 
     def complete_tasks(self, ids, done=True, list_name=None):
-        """Mark tasks complete (or reopen them), as ``jasem todo done`` does."""
+        """Mark tasks complete (or reopen them), as ``jasem todo done`` does.
+
+        Like the CLI, tasks already in that state are reported rather than
+        changed, and ids matching nothing in the list are reported rather than
+        failing the call; it fails only when no id matched at all, since ids are
+        numbered per list and the request was probably aimed at another one.
+        """
         store = self._store_for(list_name, must_exist=True)
+        identifiers = self._ids(ids, noun="task")
         tasks = store.load()
-        identifiers = self._ids(ids)
-        changed = [task for task in tasks if task.id in identifiers]
-        if not changed:
-            raise ApiError("no matching id(s)", 404)
+        matched = [task for task in tasks if task.id in identifiers]
+        if not matched:
+            raise self._no_tasks(identifiers, store.name)
+        changed = [task for task in matched if task.done != bool(done)]
         for task in changed:
             task.done = bool(done)
-        store.save(tasks)
-        return changed
+        if changed:
+            store.save(tasks)
+        changed_ids = {task.id for task in changed}
+        return {
+            "list": self._list_ref(store.name),
+            "tasks": changed,
+            "unchanged": [task for task in matched if task.id not in changed_ids],
+            "missing": sorted(identifiers - {task.id for task in matched}),
+        }
 
     def delete_tasks(self, ids, list_name=None):
         """Delete every task whose id is listed, as ``jasem todo rm`` does."""
         store = self._store_for(list_name, must_exist=True)
+        identifiers = self._ids(ids, noun="task")
         tasks = store.load()
-        identifiers = self._ids(ids)
-        kept = [task for task in tasks if task.id not in identifiers]
-        removed = len(tasks) - len(kept)
+        removed = [task for task in tasks if task.id in identifiers]
         if not removed:
-            raise ApiError("no matching id(s)", 404)
-        store.save(kept)
-        return removed
+            raise self._no_tasks(identifiers, store.name)
+        store.save([task for task in tasks if task.id not in identifiers])
+        return {
+            "list": self._list_ref(store.name),
+            "tasks": removed,
+            "missing": sorted(identifiers - {task.id for task in removed}),
+        }
 
-    def delete_task(self, task_id, list_name=None):
-        self.delete_tasks([task_id], list_name)
+    def _no_tasks(self, identifiers, list_name):
+        """Return the error for ids that match no task, worded as the CLI words it."""
+        message = ("no task " + ", ".join(f"#{i}" for i in sorted(identifiers))
+                   + " · " + task_lists.label(list_name))
+        if any(name != list_name for name in [""] + task_lists.discover(self.config.task_file)):
+            message += "; ids are numbered per list"
+        return ApiError(message, 404)
 
     def task_lists(self):
         result = []
@@ -392,8 +461,7 @@ class WebService:
             store = self._task_store(name)
             tasks = store.load()
             result.append({
-                "name": name,
-                "label": task_lists.label(name),
+                **self._list_ref(name),
                 "active": name == self.list_name,
                 "exists": store.exists(),
                 "open_count": sum(1 for task in tasks if not task.done),
@@ -445,10 +513,8 @@ class WebService:
 
     def time_list(self, period="all", tag=None):
         entries = self.timelog.load()
-        start, end, label, _ = resolve_window(
-            [entry.date for entry in entries], [self._period(period, "all")],
-            dt.date.today(), "all",
-        )
+        start, end, label = resolve_window(
+            [entry.date for entry in entries], self._period(period, "all"), dt.date.today())
         return self._in_window(entries, start, end, tag), label
 
     @staticmethod
@@ -465,61 +531,54 @@ class WebService:
             counts[tag] = counts.get(tag, 0) + 1
         return self._tag_counts(counts)
 
-    def add_time(self, text):
-        fields = self._time_parser().parse(text, dt.date.today())
-        minutes = fields.pop("minutes", 0)
+    def add_time(self, payload):
+        """Log time from a duration, the work, and options, as ``jasem track`` does."""
+        fields = _fields(payload, TIME_FIELDS)
+        if not _text(fields.get("time")).strip():
+            raise ApiError("how long? give a duration first")
+        if not _text(fields.get("work")).strip():
+            raise ApiError("what did you work on?")
+        entry = TimeEntry(date=dt.date.today().isoformat(), tag="work")
+        for field, value in fields.items():
+            self._apply_time_field(entry, field, value)
         entries = self.timelog.load()
-        entry = TimeEntry(**fields)
         entry.id = self.timelog.next_id(entries)
         entries.append(entry)
         self.timelog.save(entries)
-        if minutes == 0:
-            self.console.warn(f"couldn't read a duration from {text!r}; "
-                              "stored as-is, won't count toward totals")
         return entry
 
     def update_time(self, entry_id, payload):
+        """Change any fields of a time entry, as ``jasem track edit <id>`` does."""
+        fields = _fields(payload, TIME_FIELDS)
+        if not fields:
+            raise ApiError("nothing to change")
         entries = self.timelog.load()
         entry = next((item for item in entries if item.id == entry_id), None)
         if entry is None:
             raise ApiError(f"no time entry with id #{entry_id}", 404)
-        if not payload:
-            raise ApiError("at least one field is required")
-        for key, value in payload.items():
-            field = resolve_time_field(key) or TIME_EXTRA_FIELDS.get(str(key).lower())
-            if not field:
-                raise ApiError(f"unknown field: {key}; fields: time · work · date · tag")
+        for field, value in fields.items():
             self._apply_time_field(entry, field, value)
         self.timelog.save(entries)
         return entry
 
     def _apply_time_field(self, entry, field, value):
-        """Apply one edit to ``entry``, using jasem's own rules for each field."""
+        """Apply one value to ``entry``, using jasem's own rules for each field."""
+        text = _text(value)
         if field == "time":
-            text = str(value or "").strip()
-            minutes = parse_minutes(text)
-            entry.time_text = format_minutes(minutes) if minutes > 0 else text
-            if minutes <= 0:
-                self.console.warn(f"couldn't read a duration from {text!r}; "
-                                  "stored as-is, won't count toward totals")
-            return
-        if field == "work":
-            entry.work = str(value or "").strip()
-            return
-        if field == "date":
-            entry.date = self._resolve_date(value)
-            return
-        tag = str(value or "").strip()
-        entry.tag = "work" if tag.lower() in CLEAR_WORDS else tag
-
-    def _resolve_date(self, value):
-        """Resolve a date phrase the way ``jasem set ... date`` does."""
-        text = str(value or "").strip()
-        resolved = self.dates.resolve(text, dt.date.today())
-        if not resolved:
-            raise ApiError(f"could not understand date: {text!r}; "
-                           "try: today · yesterday · last friday · june 20 · 2026-07-01")
-        return resolved
+            minutes = parse_exact_minutes(text)
+            if minutes is None:
+                raise ApiError(f"couldn't read a duration from {text!r}; "
+                               f"durations: {DURATION_HINT}")
+            entry.time_text = format_minutes(minutes)
+        elif field == "date":
+            entry.date = self._read_date(text)
+        elif field == "tag":
+            tag = text.strip()
+            entry.tag = "work" if tag.lower() in CLEAR_WORDS else tag
+        else:
+            if not text.strip():
+                raise ApiError("an entry needs a work description")
+            entry.work = text.strip()
 
     def delete_time_entries(self, ids):
         entries = self.timelog.load()
@@ -538,10 +597,8 @@ class WebService:
 
     def spending_list(self, period="all", tag=None):
         records = self.spending_store.load()
-        start, end, label, _ = resolve_window(
-            [record.date for record in records], [self._period(period, "all")],
-            dt.date.today(), "all",
-        )
+        start, end, label = resolve_window(
+            [record.date for record in records], self._period(period, "all"), dt.date.today())
         return self._in_window(records, start, end, tag), label
 
     def spending_tags(self):
@@ -551,60 +608,56 @@ class WebService:
             counts[tag] = counts.get(tag, 0) + 1
         return self._tag_counts(counts)
 
-    def add_spending(self, text):
-        fields = self._spending_parser().parse(text, dt.date.today())
-        amount = fields.pop("amount", 0)
+    def add_spending(self, payload):
+        """Record spending from an amount, a title, and options, as ``jasem acc`` does."""
+        fields = _fields(payload, SPEND_FIELDS)
+        if not _text(fields.get("amount")).strip():
+            raise ApiError("how much? give an amount first")
+        if not _text(fields.get("title")).strip():
+            raise ApiError("what was it for?")
+        record = Spending(date=dt.date.today().isoformat(), tag="general")
+        for field, value in fields.items():
+            self._apply_spending_field(record, field, value)
         records = self.spending_store.load()
-        record = Spending(**fields)
         record.id = self.spending_store.next_id(records)
         records.append(record)
         self.spending_store.save(records)
-        if amount == 0:
-            self.console.warn(f"couldn't read an amount from {text!r}; "
-                              "stored as-is, won't count toward totals")
         return record
 
     def update_spending(self, record_id, payload):
+        """Change any fields of a spending record, as ``jasem acc edit <id>`` does."""
+        fields = _fields(payload, SPEND_FIELDS)
+        if not fields:
+            raise ApiError("nothing to change")
         records = self.spending_store.load()
         record = next((item for item in records if item.id == record_id), None)
         if record is None:
             raise ApiError(f"no spending record with id #{record_id}", 404)
-        if not payload:
-            raise ApiError("at least one field is required")
-        for key, value in payload.items():
-            field = resolve_spend_field(key) or SPEND_EXTRA_FIELDS.get(str(key).lower())
-            if not field:
-                raise ApiError(f"unknown field: {key}; "
-                               "fields: amount · title · description · date · tag")
+        for field, value in fields.items():
             self._apply_spending_field(record, field, value)
         self.spending_store.save(records)
         return record
 
     def _apply_spending_field(self, record, field, value):
-        """Apply one edit to ``record``, using jasem's own rules for each field."""
+        """Apply one value to ``record``, using jasem's own rules for each field."""
+        text = _text(value)
         if field == "amount":
-            text = str(value or "").strip()
-            amount = parse_amount(text)
-            record.amount_text = format_amount(amount) if amount > 0 else text
-            if amount <= 0:
-                self.console.warn(f"couldn't read an amount from {text!r}; "
-                                  "stored as-is, won't count toward totals")
-            return
-        if field == "title":
-            title = str(value or "").strip()
-            if not title:
-                raise ApiError("title cannot be empty")
-            record.title = title
-            return
-        if field == "description":
-            text = str(value or "").strip()
-            record.description = "" if text.lower() in CLEAR_WORDS else text
-            return
-        if field == "date":
-            record.date = self._resolve_date(value)
-            return
-        tag = str(value or "").strip()
-        record.tag = "general" if tag.lower() in CLEAR_WORDS else tag
+            amount = parse_exact_amount(text)
+            if amount is None:
+                raise ApiError(f"couldn't read an amount from {text!r}; amounts: {AMOUNT_HINT}")
+            record.amount_text = format_amount(amount)
+        elif field == "date":
+            record.date = self._read_date(text)
+        elif field == "tag":
+            tag = text.strip()
+            record.tag = "general" if tag.lower() in CLEAR_WORDS else tag
+        elif field == "description":
+            note = text.strip()
+            record.description = "" if note.lower() in CLEAR_WORDS else note
+        else:
+            if not text.strip():
+                raise ApiError("a record needs a title")
+            record.title = text.strip()
 
     def delete_spending_records(self, ids):
         records = self.spending_store.load()
@@ -639,7 +692,7 @@ class WebService:
             "date": today_iso,
             "date_display": self.calendar.format_iso(today_iso),
             "weekday": today.strftime("%A"),
-            "list": {"name": self.list_name, "label": task_lists.label(self.list_name)},
+            "list": self._list_ref(self.list_name),
             "tasks": [self._task_json(task) for task in focus],
             "open_count": len(open_tasks),
             "hidden_count": max(len(open_tasks) - len(focus), 0),
@@ -669,11 +722,10 @@ class WebService:
 
     def reports(self, kind, period="week", tag=None):
         today = dt.date.today()
-        window = [self._period(period, "week")]
+        window = self._period(period, "week")
         if kind == "time":
             entries = self.timelog.load()
-            start, end, label, _ = resolve_window(
-                [entry.date for entry in entries], window, today, "week")
+            start, end, label = resolve_window([entry.date for entry in entries], window, today)
             selected = self._in_window(entries, start, end, tag)
             prev_start, prev_end = previous_window(start, end)
             previous = self._in_window(entries, prev_start, prev_end, tag)
@@ -684,8 +736,7 @@ class WebService:
             data["entries"] = [self._time_json(entry) for entry in selected]
             return data
         records = self.spending_store.load()
-        start, end, label, _ = resolve_window(
-            [record.date for record in records], window, today, "week")
+        start, end, label = resolve_window([record.date for record in records], window, today)
         selected = self._in_window(records, start, end, tag)
         prev_start, prev_end = previous_window(start, end)
         previous = self._in_window(records, prev_start, prev_end, tag)
@@ -739,35 +790,30 @@ class WebService:
             "views": sorted(VIEWS),
             "periods": list(PERIODS),
             "priorities": list(PRIORITY_RANK),
+            "priority_aliases": dict(PRIORITY_ALIASES),
             "clear_words": sorted(word for word in CLEAR_WORDS if word),
+            "deadline_clear_words": sorted(word for word in CLEAR_WORDS | NO_DATE if word),
             "fields": {
-                "task": {field: sorted(aliases) for field, aliases in FIELD_ALIASES.items()},
-                "time": {field: sorted(aliases) for field, aliases in TIME_FIELD_ALIASES.items()},
-                "spending": {field: sorted(aliases)
-                             for field, aliases in SPEND_FIELD_ALIASES.items()},
+                "task": _aliases(TASK_EDIT_FIELDS),
+                "time": _aliases(TIME_FIELDS),
+                "spending": _aliases(SPEND_FIELDS),
+            },
+            "options": {
+                "todo": {"add": dict(TASK_FLAGS), "edit": dict(TASK_EDIT_FLAGS)},
+                "track": {"add": dict(TIME_FLAGS), "edit": dict(TIME_EDIT_FLAGS)},
+                "acc": {"add": dict(SPEND_FLAGS), "edit": dict(SPEND_EDIT_FLAGS)},
             },
         }
 
     def configuration(self):
-        """Answer the ``FILES & CONFIG`` section of ``jasem help``.
-
-        The API key itself is never returned — only whether one is configured.
-        """
+        """Answer the ``FILES & CONFIG`` section of ``jasem help``."""
         return {
-            "provider": self.config.provider,
-            "providers": list(PROVIDERS),
-            "model": self.config.model,
-            "default_models": dict(DEFAULT_MODELS),
-            "api_key_set": bool(self.config.api_key),
-            "api_base": self.config.api_base,
-            "openai_api_base": self.config.openai_api_base,
-            "ollama_host": self.config.ollama_host,
             "directory": self.config.directory,
             "task_file": task_lists.path_for(self.config.task_file, self.list_name),
             "default_task_file": self.config.task_file,
             "track_file": self.config.track_file,
             "spend_file": self.config.spend_file,
-            "list": {"name": self.list_name, "label": task_lists.label(self.list_name)},
+            "list": self._list_ref(self.list_name),
             "calendar": "jalali" if self.config.jalali else "gregorian",
             "accent": self.config.accent,
             "environment": list(ENVIRONMENT_VARIABLES),
