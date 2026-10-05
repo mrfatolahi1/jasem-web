@@ -515,7 +515,12 @@ class WebService:
         entries = self.timelog.load()
         start, end, label = resolve_window(
             [entry.date for entry in entries], self._period(period, "all"), dt.date.today())
-        return self._in_window(entries, start, end, tag), label
+        return self._chronological(self._in_window(entries, start, end, tag)), label
+
+    @staticmethod
+    def _chronological(items):
+        """Return time entries or spending records oldest first, as jasem lists them."""
+        return sorted(items, key=lambda item: (item.date, item.id))
 
     @staticmethod
     def _in_window(items, start, end, tag):
@@ -599,7 +604,7 @@ class WebService:
         records = self.spending_store.load()
         start, end, label = resolve_window(
             [record.date for record in records], self._period(period, "all"), dt.date.today())
-        return self._in_window(records, start, end, tag), label
+        return self._chronological(self._in_window(records, start, end, tag)), label
 
     def spending_tags(self):
         counts = {}
@@ -733,7 +738,7 @@ class WebService:
                                   sum(entry.minutes() for entry in previous))
             data = asdict(report)
             data["total_display"] = format_minutes(report.total_minutes)
-            data["entries"] = [self._time_json(entry) for entry in selected]
+            data["entries"] = [self._time_json(entry) for entry in self._chronological(selected)]
             return data
         records = self.spending_store.load()
         start, end, label = resolve_window([record.date for record in records], window, today)
@@ -744,7 +749,8 @@ class WebService:
                                        sum(record.amount() for record in previous))
         data = asdict(report)
         data["total_display"] = format_amount(report.total_amount)
-        data["records"] = [self._spending_json(record) for record in selected]
+        data["records"] = [self._spending_json(record)
+                           for record in self._chronological(selected)]
         return data
 
     # ---------------------------------------------------- meta, help & config

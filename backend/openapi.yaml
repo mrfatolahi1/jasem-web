@@ -426,7 +426,7 @@ paths:
           description: Return the report instead of the entries.
       responses:
         "200":
-          description: The entries inside the period.
+          description: The entries inside the period, oldest first.
           content:
             application/json:
               schema:
@@ -561,7 +561,7 @@ paths:
           description: Return the report instead of the records.
       responses:
         "200":
-          description: The records inside the period.
+          description: The records inside the period, oldest first.
           content:
             application/json:
               schema:
@@ -1128,6 +1128,7 @@ components:
           example: 480
         entries:
           type: array
+          description: The entries in the period, oldest first.
           items: { $ref: "#/components/schemas/TimeEntry" }
 
     SpendingReport:
@@ -1167,6 +1168,7 @@ components:
           example: 380000
         records:
           type: array
+          description: The records in the period, oldest first.
           items: { $ref: "#/components/schemas/SpendingRecord" }
 
     Dashboard:
