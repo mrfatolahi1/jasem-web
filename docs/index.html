@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>jasem — tasks, time &amp; spending in your terminal</title>
-<meta name="description" content="jasem is a plain-text task manager, time tracker, and spending log for your terminal. Write naturally; your data stays in Markdown files you own.">
+<meta name="description" content="jasem is a plain-text task manager, time tracker, and spending log for your terminal. Short commands with flags, fully offline; your data stays in Markdown files you own.">
 <meta name="theme-color" content="#0A0806">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.min.js" crossorigin>
@@ -57,7 +57,7 @@
 
   a { color: var(--link); }
 
-  code { font-family: var(--mono); font-size: 0.9em; }
+  code { font-family: var(--mono); font-size: 0.9em; white-space: nowrap; }
 
   :focus-visible {
     outline: 2px solid var(--link);
@@ -284,6 +284,7 @@
   .term .p { color: var(--orange); user-select: none; }   /* prompt */
   .term .c { color: #F4ECE2; }                           /* command */
   .term .s { color: var(--gold); }                       /* quoted text */
+  .term .f { color: #C79BB4; }                           /* -d -p -t options */
   .term .ok { color: #9CC28A; }                          /* ✓ */
   .term .t { color: #8FA0D8; }                           /* #tags */
   .term .d { color: rgba(179, 166, 152, 0.55); }          /* rules and dim notes */
@@ -461,25 +462,25 @@
   </a>
 </section>
 
-<!-- ========== PAGE 2 — capture, the way you'd say it ========== -->
+<!-- ========== PAGE 2 — capture, one command and a few flags ========== -->
 <section class="page" id="what" aria-labelledby="what-title">
   <div class="wrap reveal">
     <div class="head">
       <p class="eyebrow">plain-text life admin for your terminal</p>
-      <h2 class="lead" id="what-title">Tasks, time, and spending — written the way you'd say them.</h2>
-      <p class="body">jasem reads the deadline, duration, amount, and tags from plain language, and keeps it all as Markdown under <code>~/.jasem/</code>. Zero dependencies.</p>
+      <h2 class="lead" id="what-title">Tasks, time, and spending — one short command each.</h2>
+      <p class="body">Your text is stored exactly as typed; <code>-d</code>, <code>-p</code>, and <code>-t</code> set the date, priority, and tags. It all stays as Markdown under <code>~/.jasem/</code>. Zero dependencies, fully offline.</p>
     </div>
 
     <div class="term" role="figure" aria-label="Adding a task, a time entry, and a spending record with jasem">
       <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>capture</span></div>
-<pre><span class="p">$</span> <span class="c">jasem todo</span> <span class="s">"pay rent next friday, high priority, finance"</span>
+<pre><span class="p">$</span> <span class="c">jasem todo</span> <span class="s">"pay rent"</span> <span class="f">-d</span> fri <span class="f">-p</span> high <span class="f">-t</span> finance
 <span class="ok">✓</span> added #1: pay rent
   priority=high  deadline=2026-09-18  tags=finance
 
-<span class="p">$</span> <span class="c">jasem track</span> <span class="s">"1h30min code review, work"</span>
+<span class="p">$</span> <span class="c">jasem track</span> 1h30m <span class="s">"code review"</span> <span class="f">-t</span> work
 <span class="ok">✓</span> tracked #1 1h 30min · code review · today · <span class="t">#work</span>
 
-<span class="p">$</span> <span class="c">jasem acc</span> <span class="s">"50k lunch with the team, food"</span>
+<span class="p">$</span> <span class="c">jasem acc</span> 50k <span class="s">"lunch with the team"</span> <span class="f">-t</span> food
 <span class="ok">✓</span> recorded #1 50,000 · lunch with the team · today · <span class="t">#food</span></pre>
     </div>
 
@@ -544,7 +545,7 @@ Task lists
 
     <ul class="features">
       <li style="--tile:#E07B39"><strong>Named lists</strong>Keep work and home apart with <code>jasem todo @work</code>.</li>
-      <li style="--tile:#5A6DA8"><strong>Any AI, or none</strong>Local Ollama by default, or OpenAI-compatible and Claude. Entries still save offline.</li>
+      <li style="--tile:#5A6DA8"><strong>Flags, not guesses</strong>Dates like <code>fri</code>, <code>+3d</code>, or <code>last mon</code>. Nothing leaves your machine.</li>
       <li style="--tile:#D8A657"><strong>Plain Markdown</strong>Grep, hand-edit, sync, or version-control <code>~/.jasem/</code>.</li>
       <li style="--tile:#8A4B6B"><strong>Jalali calendar</strong>Set <code>JASEM_JALALI=true</code> to type and read Persian dates.</li>
     </ul>
