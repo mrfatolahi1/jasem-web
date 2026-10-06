@@ -1,13 +1,14 @@
 /* Generated from design/tokens.json by scripts/tokens.mjs. Do not edit. */
 
 :root, [data-theme="light"] {
-  --canvas: #eceef2;
+  --canvas: #f7f1e8;
   --surface: #ffffff;
-  --ink: #16181d;
-  --ink-muted: #4b5160;
+  --ink: #2a1e1a;
+  --ink-muted: #5e4f47;
   --placeholder: #5e4a3c;
-  --row-hover: #f4f5f8;
-  --bar-idle: #d5d9e2;
+  --row-hover: #fbf6ef;
+  --pill: #f3eadf;
+  --bar-idle: #dce6c6;
   --orange: #e07b39;
   --blue: #5a6da8;
   --gold: #d8a657;
@@ -32,11 +33,11 @@
   --space-tile: 22px;
   --space-hero: 24px;
   --space-page-x: 32px;
-  --radius-tile: 28px;
-  --radius-row: 16px;
-  --radius-stack: 14px;
-  --radius-bar: 10px;
-  --radius-check: 8px;
+  --radius-tile: 32px 6px;
+  --radius-row: 16px 4px;
+  --radius-stack: 14px 3px;
+  --radius-bar: 10px 3px;
+  --radius-check: 10px 3px;
   --radius-mark: 3px;
   --radius-pill: 999px;
   --control-xl: 52px;
@@ -53,19 +54,20 @@
   --chart-week: 88px;
   --chart-report: 150px;
   --bp-single: 760px;
-  --font-sans: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Young Serif", Georgia, "Times New Roman", serif;
+  --font-sans: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.figure-xl { font-family: var(--font-sans); font-size: 84px; line-height: 0.95; font-weight: 800; letter-spacing: -0.05em; }
-.figure-l { font-family: var(--font-sans); font-size: 58px; line-height: 1; font-weight: 800; letter-spacing: -0.04em; }
-.figure-m { font-family: var(--font-sans); font-size: 52px; line-height: 1; font-weight: 800; letter-spacing: -0.04em; }
-.figure { font-family: var(--font-sans); font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -0.04em; }
-.figure-s { font-family: var(--font-sans); font-size: 44px; line-height: 1; font-weight: 800; letter-spacing: -0.03em; }
-.tile-title { font-family: var(--font-sans); font-size: 34px; line-height: 1; font-weight: 800; letter-spacing: -0.03em; }
-.tile-title-s { font-family: var(--font-sans); font-size: 30px; line-height: 1.05; font-weight: 800; letter-spacing: -0.02em; }
-.brand { font-family: var(--font-sans); font-size: 24px; line-height: 1; font-weight: 800; letter-spacing: -0.03em; }
-.heading-l { font-family: var(--font-sans); font-size: 26px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
-.heading-m { font-family: var(--font-sans); font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
+.figure-xl { font-family: var(--font-display); font-size: 84px; line-height: 0.95; font-weight: 400; letter-spacing: -0.03em; }
+.figure-l { font-family: var(--font-display); font-size: 58px; line-height: 1; font-weight: 400; letter-spacing: -0.02em; }
+.figure-m { font-family: var(--font-display); font-size: 52px; line-height: 1; font-weight: 400; letter-spacing: -0.02em; }
+.figure { font-family: var(--font-display); font-size: 46px; line-height: 1; font-weight: 400; letter-spacing: -0.02em; }
+.figure-s { font-family: var(--font-display); font-size: 44px; line-height: 1; font-weight: 400; letter-spacing: -0.02em; }
+.tile-title { font-family: var(--font-display); font-size: 34px; line-height: 1; font-weight: 400; letter-spacing: -0.01em; }
+.tile-title-s { font-family: var(--font-display); font-size: 30px; line-height: 1.05; font-weight: 400; letter-spacing: -0.01em; }
+.brand { font-family: var(--font-display); font-size: 24px; line-height: 1; font-weight: 400; letter-spacing: -0.01em; }
+.heading-l { font-family: var(--font-display); font-size: 26px; line-height: 1.2; font-weight: 400; letter-spacing: -0.01em; }
+.heading-m { font-family: var(--font-display); font-size: 22px; line-height: 1.2; font-weight: 400; letter-spacing: -0.01em; }
 .label { font-family: var(--font-sans); font-size: 15px; line-height: 1.3; font-weight: 600; }
 .form-label { font-family: var(--font-sans); font-size: 15px; line-height: 1.3; font-weight: 700; }
 .row-title { font-family: var(--font-sans); font-size: 17px; line-height: 1.3; font-weight: 500; }

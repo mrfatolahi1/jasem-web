@@ -8,7 +8,7 @@ here are visible to the CLI immediately, and vice versa.
 
 ```text
 backend/   Django JSON API; no models, ORM, migrations, or database
-frontend/  The web app: plain HTML, CSS and JavaScript in the Jasem Bento design
+frontend/  The web app: plain HTML, CSS and JavaScript in the Jasem Bento design, Sicily pack
 docs/      Landing page for the jasem CLI (index.html), served by GitHub Pages
 ```
 

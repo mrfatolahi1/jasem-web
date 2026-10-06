@@ -25,7 +25,7 @@ button.jb-row-body > .jb-row-title { white-space: nowrap; overflow: hidden; text
 .jb-check[data-state="done"] > span { background: var(--tag, var(--ink-muted)); }
 
 /* ---------- loading and empty ---------- */
-.jb-skel { display: block; height: 14px; border-radius: var(--radius-pill); background: var(--bar-idle); }
+.jb-skel { display: block; height: 14px; border-radius: var(--radius-pill); background: var(--pill); }
 .jb-skel--pill { flex: none; width: 64px; height: 24px; }
 .jb-row .jb-skel:not(.jb-skel--pill) { flex: 1; max-width: 60%; }
 .jb-empty { margin: 0; padding: 14px 0; font-size: 17px; font-weight: 500; color: var(--ink-muted); }

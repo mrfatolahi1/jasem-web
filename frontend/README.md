@@ -29,29 +29,47 @@ this page, because the API writes the user's own files.
 
 ## Design
 
-The look is the **Jasem Bento** design system (design #13): a 4-column bento
-grid of rounded tiles that drops to one column at 760px and below. Its README,
-`screens.md` and `data.md` are the spec, and its Screens previews are the
-reference markup. The pages reuse that markup and its `jb-` classes.
+The structure is the **Jasem Bento** design system (design #13): a bento grid
+of tiles that drops to one column at 760px and below. Its README, `screens.md`
+and `data.md` are the spec, and its Screens previews are the reference markup.
+The pages reuse that markup and its `jb-` classes.
+
+It is dressed in the **Sicily** pack (round 2, Mediterranean minimal). Sicily
+keeps the five logo colours and what they mean (orange quick add, blue time,
+gold today, red late, plum counts) and changes what surrounds them:
+
+- **Neutrals.** A ricotta canvas (`#F7F1E8`), white tiles, espresso ink
+  (`#2A1E1A`), a sand `pill` fill for neutral due pills, and pistachio
+  (`#DCE6C6`) for idle chart bars.
+- **Type.** Young Serif for figures, tile titles, headings and the brand;
+  Onest for everything else. Young Serif has a single weight, so those rules
+  ask for 400.
+- **Shape.** Leaf-shaped tiles: two round corners (32px) and two tight ones
+  (6px). Checkboxes, bars and report stacks repeat the shape. Pills stay round.
+- **Today.** Three columns: Next up spans two beside Tracked today, Needs you
+  spans two columns and two rows beside Spent today and Open tasks, and the
+  week and Quick add run full width. The other pages keep their grids.
 
 ```text
-design/tokens.json       the design system's tokens, as published
+design/tokens.json       the tokens: Jasem Bento's, with Sicily's values
 scripts/tokens.mjs       compiles them to public/styles/tokens.css (npm run tokens)
 public/styles/
   tokens.css             generated; do not edit
-  bundle.css             the design system's component stylesheet (one fix, below)
+  bundle.css             the design system's component stylesheet, with the
+                         fix below and the Sicily type and Today grid
   app.css                what the design leaves to the app: loading, errors,
                          the edit sheet, the lists manager, help, month charts
-  fonts.css              Bricolage Grotesque, self-hosted (OFL), so it works offline
+  fonts.css              Onest and Young Serif, self-hosted (OFL), so it works offline
 ```
 
-`bundle.css` is the published file with one change. Its base reset
+`bundle.css` started as the published file with one fix. Its base reset
 `.jb-root button, .jb-root input, .jb-root select { font: inherit; color: inherit }`
 has specificity (0,1,1). That outranks the single-class component rules that
 follow it, so the white **Done** button got white text, **Add** got ink on
 ink, and text typed into the blue New task bar was white on white. The copy
 here wraps the selector in `:where()`, which keeps the reset at (0,1,0). Make
-the same change if you copy a newer `bundle.css` from the design system.
+the same change if you copy a newer `bundle.css` from the design system, and
+keep the Sicily rules (`--font-display`, `--pill`, `.jb-bento--today`).
 
 Rules the design set and the code follows:
 

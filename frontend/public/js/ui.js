@@ -44,7 +44,7 @@ export function onTabKeys(event) {
  */
 export function errorTile(error, { heading = "Something went wrong", retry = false } = {}) {
   if (!error) return "";
-  return html`<section class="jb-tile jb-fill-red jb-span-4" role="alert" aria-labelledby="error-heading">
+  return html`<section class="jb-tile jb-fill-red jb-span-all" role="alert" aria-labelledby="error-heading">
     <h2 id="error-heading" class="jb-label">${heading}</h2>
     <div><p class="jb-error-text">${error}</p><button class="jb-btn jb-btn--light" type="button" data-action="dismiss-error" data-key="dismiss-error">${retry ? "Try again" : "Dismiss"}</button></div>
   </section>`;

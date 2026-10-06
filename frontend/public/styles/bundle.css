@@ -1,6 +1,8 @@
 /* Jasem Bento: the component stylesheet.
    Load after tokens.css (every var() below is a token). Class prefix: jb-.
-   Measurements are exactly those of design #13; see README "Layout". */
+   Measurements are those of design #13. jasem-web wears it in the Sicily pack:
+   Young Serif (--font-display) for figures, tile titles, headings and the
+   brand; Onest (--font-sans) for everything else; leaf-shaped tiles. */
 
 /* ---------- base ---------- */
 .jb-root, .jb-root *, .jb-root *::before, .jb-root *::after { box-sizing: border-box; }
@@ -18,7 +20,7 @@
 /* ---------- page and header ---------- */
 .jb-page { min-height: 100vh; padding: var(--space-hero) var(--space-page-x) var(--space-page-x); background: var(--canvas); }
 .jb-header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-m) var(--space-xl); margin-bottom: var(--space-xl); }
-.jb-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-size: 24px; font-weight: 800; letter-spacing: -.03em; }
+.jb-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--font-display); font-size: 24px; font-weight: 400; letter-spacing: -.01em; }
 .jb-mark { display: grid; grid-template-columns: repeat(2, var(--mark-square)); gap: var(--space-mark); }
 .jb-mark > span { height: var(--mark-square); border-radius: var(--radius-mark); }
 .jb-mark > span:nth-child(1) { background: var(--orange); }
@@ -39,8 +41,14 @@
 /* ---------- the bento grid ---------- */
 .jb-bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(var(--grid-row-min), auto); gap: var(--space-l); }
 .jb-bento--tasks { grid-auto-rows: minmax(140px, auto); }
+/* Today (Sicily): three columns; Next up spans two beside Tracked today, the
+   list spans two under it beside Spent and Open, the week and Quick add run
+   full width. Tiles are in that order in the markup, so phones stack them the same way. */
+.jb-bento--today { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .jb-span-2 { grid-column: span 2; }
 .jb-span-4 { grid-column: span 4; }
+.jb-span-all { grid-column: 1 / -1; }
+.jb-rows-2 { grid-row: span 2; }
 .jb-rows-3 { grid-row: span 3; }
 @media (max-width: 760px) {
   .jb-bento { grid-template-columns: 1fr; }
@@ -63,24 +71,25 @@
 .jb-label { margin: 0; font-size: 15px; font-weight: 600; }
 .jb-tile.jb-fill-surface .jb-label, .jb-label--muted { color: var(--ink-muted); }
 .jb-detail { margin: 6px 0 0; font-size: 14px; font-weight: 600; }
-.jb-tile-title { margin: 0; font-size: 34px; line-height: 1; font-weight: 800; letter-spacing: -.03em; }
-.jb-tile-title--s { font-size: 30px; line-height: 1.05; letter-spacing: -.02em; }
+.jb-tile-title { margin: 0; font-family: var(--font-display); font-size: 34px; line-height: 1; font-weight: 400; letter-spacing: -.01em; }
+.jb-tile-title--s { font-size: 30px; line-height: 1.05; }
 
-/* big numbers: the last unit or digit group is set smaller inside <small> */
-.jb-figure { margin: 0; font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.jb-figure small { font-size: 24px; }
-.jb-figure--xl { font-size: 84px; line-height: .95; letter-spacing: -.05em; }
-.jb-figure--xl small { font-size: 36px; letter-spacing: -.02em; }
+/* big numbers: the last unit or digit group is set smaller inside <small>.
+   Young Serif has one weight, 400; never ask it for more or it is faked. */
+.jb-figure { margin: 0; font-family: var(--font-display); font-size: 46px; line-height: 1; font-weight: 400; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.jb-figure small { font-size: 24px; letter-spacing: 0; }
+.jb-figure--xl { font-size: 84px; line-height: .95; letter-spacing: -.03em; }
+.jb-figure--xl small { font-size: 36px; }
 .jb-figure--l { font-size: 58px; }
-.jb-figure--l small { font-size: 16px; font-weight: 600; letter-spacing: 0; }
+.jb-figure--l small { font-size: 16px; }
 .jb-figure--m { font-size: 52px; }
-.jb-figure--s { font-size: 44px; letter-spacing: -.03em; }
+.jb-figure--s { font-size: 44px; }
 .jb-figure--s small { font-size: 20px; }
 
 /* ---------- lists of tasks ---------- */
 .jb-list-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--space-s); }
-.jb-h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
-.jb-h2 { margin: 0 0 var(--space-s); font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.jb-h1 { margin: 0; font-family: var(--font-display); font-size: 26px; font-weight: 400; letter-spacing: -.01em; }
+.jb-h2 { margin: 0 0 var(--space-s); font-family: var(--font-display); font-size: 22px; font-weight: 400; letter-spacing: -.01em; }
 .jb-more { font-weight: 600; color: var(--ink-muted) !important; text-decoration: none; }
 .jb-rows { list-style: none; margin: 0; padding: 0; }
 .jb-row { display: flex; align-items: center; gap: var(--space-s); min-height: var(--row-min); padding: 0 6px 0 0; border-radius: var(--radius-row); }
@@ -94,7 +103,7 @@
 .jb-row-meta { margin: 0; font-size: 13px; color: var(--ink-muted); }
 
 /* due pill: neutral, today, overdue */
-.jb-due { flex: none; padding: 4px 10px; border-radius: var(--radius-pill); background: var(--canvas); color: var(--ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.jb-due { flex: none; padding: 4px 10px; border-radius: var(--radius-pill); background: var(--pill); color: var(--ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .jb-due--today { background: var(--gold); color: var(--on-gold); }
 .jb-due--overdue { background: var(--red); color: var(--on-red); }
 
