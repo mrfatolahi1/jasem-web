@@ -6,9 +6,9 @@
   --ink: #2a1e1a;
   --ink-muted: #5e4f47;
   --placeholder: #5e4a3c;
-  --row-hover: #fbf6ef;
-  --pill: #f3eadf;
-  --bar-idle: #dce6c6;
+  --row-hover: rgba(255,255,255,0.16);
+  --pill: #ffffff;
+  --bar-idle: rgba(255,255,255,0.42);
   --orange: #e07b39;
   --blue: #5a6da8;
   --gold: #d8a657;

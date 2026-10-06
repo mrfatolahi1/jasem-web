@@ -38,17 +38,31 @@ It is dressed in the **Sicily** pack (round 2, Mediterranean minimal). Sicily
 keeps the five logo colours and what they mean (orange quick add, blue time,
 gold today, red late, plum counts) and changes what surrounds them:
 
-- **Neutrals.** A ricotta canvas (`#F7F1E8`), white tiles, espresso ink
-  (`#2A1E1A`), a sand `pill` fill for neutral due pills, and pistachio
-  (`#DCE6C6`) for idle chart bars.
+- **Neutrals.** A ricotta canvas (`#F7F1E8`) and espresso ink (`#2A1E1A`).
 - **Type.** Young Serif for figures, tile titles, headings and the brand;
   Onest for everything else. Young Serif has a single weight, so those rules
   ask for 400.
 - **Shape.** Leaf-shaped tiles: two round corners (32px) and two tight ones
   (6px). Checkboxes, bars and report stacks repeat the shape. Pills stay round.
-- **Today.** Three columns: Next up spans two beside Tracked today, Needs you
-  spans two columns and two rows beside Spent today and Open tasks, and the
-  week and Quick add run full width. The other pages keep their grids.
+- **Four colours on top.** Every page opens with a row of four cards in the
+  logo mark's colours, each holding real data:
+
+  | Page | Orange | Blue | Gold | Red |
+  | --- | --- | --- | --- | --- |
+  | Today | Open tasks | Tracked today | Spent today | Next up |
+  | Tasks | Open | This week | Today | Overdue |
+  | Time, Spending | Total | Per active day | Today | Busiest / biggest day |
+  | Help | Active list | jasem version | Calendar | Lists |
+
+  These cards keep their colour when empty ("Nothing late", "All clear").
+- **Every tile is coloured.** Lists are plum. A chart or the tile closing a
+  tag row takes the first logo colour its tags don't use (`freeColour` in
+  `report.js`). White is kept for small things on the tiles: due and priority
+  pills (a dot marks today or late), checkboxes, tag chips, inputs, buttons,
+  chart bars, and the header capsules on the canvas.
+- **Tasks** lists every open task in one table: due, deadline, priority,
+  tags, and when it was added. The table's row grows so the page always
+  reaches the bottom of the window; on phones each task becomes two lines.
 
 ```text
 design/tokens.json       the tokens: Jasem Bento's, with Sicily's values
@@ -69,7 +83,7 @@ follow it, so the white **Done** button got white text, **Add** got ink on
 ink, and text typed into the blue New task bar was white on white. The copy
 here wraps the selector in `:where()`, which keeps the reset at (0,1,0). Make
 the same change if you copy a newer `bundle.css` from the design system, and
-keep the Sicily rules (`--font-display`, `--pill`, `.jb-bento--today`).
+keep the Sicily rules (`--font-display`, `--pill`, `.jb-span-all`, `.jb-rows-2`).
 
 Rules the design set and the code follows:
 

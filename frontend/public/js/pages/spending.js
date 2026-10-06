@@ -8,13 +8,13 @@ import { closingSpan, flagValue, formError } from "../report.js";
 import { DASH, skeletonRows } from "../ui.js";
 import { mountReport } from "./report-page.js";
 
-function restTile(report) {
+function restTile(report, fill) {
   const rest = report?.by_tag.slice(3) ?? [];
   const rows = rest.length > 4
     ? [...rest.slice(0, 3), [`${rest.length - 3} more tags`, rest.slice(3).reduce((total, [, amount]) => total + amount, 0), true]]
     : rest;
-  return html`<section class="jb-tile jb-tile--chart${closingSpan(report)}" aria-labelledby="rest" style="justify-content:flex-start">
-      <h2 id="rest" class="jb-label jb-label--muted" style="margin-bottom:6px">The rest</h2>
+  return html`<section class="jb-tile jb-tile--chart jb-fill-${fill}${closingSpan(report)}" aria-labelledby="rest" style="justify-content:flex-start">
+      <h2 id="rest" class="jb-label" style="margin-bottom:6px">The rest</h2>
       ${report && !rows.length ? html`<p class="jb-empty" style="padding:0">${report.by_tag.length ? "No other tags." : "Nothing spent yet."}</p>`
         : html`<ol class="jb-top">${report
           ? rows.map(([tag, amount, summary]) => html`<li><span>${summary ? tag : `#${tag}`}</span><b>${f.formatAmount(amount)}</b></li>`)
@@ -22,13 +22,13 @@ function restTile(report) {
     </section>`;
 }
 
-function recordsTile(report, colours) {
+function recordsTile(report, colours, fill) {
   const records = report?.records ?? [];
   const row = (record) => {
     const meta = [`#${record.id}`, f.weekdayDayMonth(record.date), `#${record.tag}`, record.description].filter(Boolean).join(" · ");
     return html`<li class="jb-row jb-row--meta"><span class="jb-check" aria-hidden="true" style="--tag:var(--${colours.get(record.tag) ?? "ink-muted"})"><span></span></span><button class="jb-row-body jb-plain" type="button" aria-haspopup="dialog" data-action="edit" data-id="${record.id}" data-key="edit-${record.id}"><span class="jb-row-title">${record.title}</span><span class="jb-row-meta">${meta}</span></button><span class="jb-due">${record.amount_display}</span></li>`;
   };
-  return html`<section class="jb-tile jb-tile--list jb-span-4" aria-labelledby="rc"${attr("aria-busy", !report && "true")}>
+  return html`<section class="jb-tile jb-tile--list jb-fill-${fill} jb-span-4" aria-labelledby="rc"${attr("aria-busy", !report && "true")}>
       <div class="jb-list-head"><h2 id="rc" class="jb-h1">Records</h2><span class="jb-more">oldest first · ${report ? records.length : DASH}</span></div>
       ${report && !records.length ? html`<p class="jb-empty">Nothing spent in this period.</p>`
         : html`<ul class="jb-rows">${report ? records.map(row) : skeletonRows(3, { meta: true })}</ul>`}

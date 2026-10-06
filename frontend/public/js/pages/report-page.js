@@ -3,14 +3,14 @@
 
 import { api } from "../api.js";
 import { html } from "../html.js";
-import { dayChart, hero, peakDay, perActiveDay, periodControl, PERIODS, tagTiles } from "../report.js";
+import { dayChart, freeColour, hero, LOADING_TAGS, peakDay, perActiveDay, periodControl, PERIODS, tagTiles, todayCard } from "../report.js";
 import { reportColours } from "../tags.js";
 import { errorTile, header, painter } from "../ui.js";
 
 /**
  * spec: {
  *   kind: "time" | "spending", path: "/time", api: "time/",
- *   items(report), closingTile(report, colours), listTile(report, colours),
+ *   items(report), closingTile(report, fill), listTile(report, colours, fill),
  *   addBar(state), body(form) → request body (throws Error with a note),
  *   edit(item, onChange)
  * }
@@ -24,16 +24,23 @@ export function mountReport(root, ctx, spec) {
   const paint = painter(root, () => {
     const report = state.report;
     const colours = reportColours((report?.by_tag ?? []).map(([tag]) => tag));
+    // The chart and the closing tile take a colour none of their tags use;
+    // lists are plum on every page.
+    const tagRow = report ? report.by_tag.slice(0, 3).map(([tag]) => colours.get(tag)) : LOADING_TAGS;
+    const chartFill = spec.kind === "time" ? freeColour([...colours.values()]) : freeColour(["gold", "red"]);
+    const closingFill = freeColour(tagRow);
+    const listFill = "plum";
     return html`${header(spec.path, periodControl(state.period))}
     <main class="jb-bento">
       ${errorTile(state.error, { retry: state.loadFailed })}
       ${hero(spec.kind, report, state.period)}
-      ${peakDay(spec.kind, report)}
       ${perActiveDay(spec.kind, report)}
-      ${dayChart(spec.kind, report, report ? spec.items(report) : [], colours)}
+      ${todayCard(spec.kind, report, report ? spec.items(report) : [])}
+      ${peakDay(spec.kind, report)}
+      ${dayChart(spec.kind, report, report ? spec.items(report) : [], colours, chartFill)}
       ${tagTiles(spec.kind, report, colours)}
-      ${spec.closingTile(report, colours)}
-      ${spec.listTile(report, colours)}
+      ${spec.closingTile(report, closingFill)}
+      ${spec.listTile(report, colours, listFill)}
       ${spec.addBar(state)}
     </main>`;
   });

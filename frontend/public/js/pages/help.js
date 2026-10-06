@@ -1,14 +1,16 @@
-// Help and settings, opened from the "?" pill (screens.md, "Recipes"): white
-// tiles for the files, the calendar and the active list, and the command
-// reference from GET /api/help/.
+// Help and settings, opened from the "?" pill (screens.md, "Recipes"). Like
+// every page it opens with four cards in the logo colours: the active list
+// (orange), jasem's version (blue), the calendar (gold) and the lists (red).
+// Then the about and files tiles, and the command reference from GET /api/help/,
+// every tile in a logo colour.
 
 import { api, loadConfig } from "../api.js";
 import { attr, html } from "../html.js";
 import { DASH, errorTile, header, painter } from "../ui.js";
 
 function aboutTile(meta) {
-  return html`<section class="jb-tile jb-span-2" aria-labelledby="about">
-      <h1 id="about" class="jb-label jb-label--muted">Help &amp; settings</h1>
+  return html`<section class="jb-tile jb-fill-plum jb-span-2" aria-labelledby="about">
+      <h2 id="about" class="jb-label">Help &amp; settings</h2>
       <img class="jb-wordmark" src="/assets/jasem-wordmark.svg" alt="jasem" width="444" height="156">
       <p class="jb-detail">${meta ? html`${meta.description} <a href="${meta.repository}">Repository</a> · <a href="${meta.wiki}">Wiki</a>` : DASH}</p>
     </section>`;
@@ -28,14 +30,16 @@ function filesTile(config) {
     ["time", config.track_file],
     ["spending", config.spend_file],
   ] : [];
-  return html`<section class="jb-tile jb-span-2" aria-labelledby="files" style="justify-content:flex-start">
-      <h2 id="files" class="jb-label jb-label--muted" style="margin-bottom:12px">Files</h2>
+  return html`<section class="jb-tile jb-fill-blue jb-span-2" aria-labelledby="files" style="justify-content:flex-start">
+      <h2 id="files" class="jb-label" style="margin-bottom:12px">Files</h2>
       <dl class="jb-files">${config ? files.map(([name, path]) => html`<div><dt>${name}</dt><dd>${path}</dd></div>`) : html`<div><dt>${DASH}</dt></div>`}</dl>
     </section>`;
 }
 
-function commandTile(namespace) {
-  return html`<section class="jb-tile jb-tile--chart jb-span-2" aria-labelledby="ns-${namespace.name}">
+const COMMAND_FILLS = ["orange", "red", "gold", "plum", "blue"];
+
+function commandTile(namespace, index) {
+  return html`<section class="jb-tile jb-tile--chart jb-fill-${COMMAND_FILLS[index % COMMAND_FILLS.length]} jb-span-2" aria-labelledby="ns-${namespace.name}">
       <h2 id="ns-${namespace.name}" class="jb-h2" style="margin-bottom:14px">${namespace.title}</h2>
       <ul class="jb-commands">${namespace.commands.map((command) => html`<li><code>${command.command}</code><p>${command.summary} · ${command.method} ${command.path}</p></li>`)}</ul>
     </section>`;
@@ -46,13 +50,14 @@ function view(state) {
   const calendar = config && (config.calendar === "jalali" ? "Jalali" : "Gregorian");
   return html`${header("/help")}
   <main class="jb-bento"${attr("aria-busy", !state.data && "true")}>
+    <h1 class="jb-sr-only">Help and settings</h1>
     ${errorTile(state.error, { retry: true })}
-    ${aboutTile(meta)}
-    ${statTile({ fill: "blue", label: "jasem", value: meta?.jasem_version, detail: meta && "installed version" })}
-    ${statTile({ fill: "plum", label: "Calendar", value: calendar, detail: config && "JASEM_JALALI switches it" })}
-    ${filesTile(config)}
     ${statTile({ fill: "orange", label: "Active list", value: config?.list.label, detail: config && "JASEM_LIST picks it" })}
-    ${statTile({ label: "Lists", value: lists?.length, detail: lists?.map((list) => list.label).join(" · ") })}
+    ${statTile({ fill: "blue", label: "jasem", value: meta?.jasem_version, detail: meta && "installed version" })}
+    ${statTile({ fill: "gold", label: "Calendar", value: calendar, detail: config && "JASEM_JALALI switches it" })}
+    ${statTile({ fill: "red", label: "Lists", value: lists?.length, detail: lists?.map((list) => list.label).join(" · ") })}
+    ${aboutTile(meta)}
+    ${filesTile(config)}
     ${(reference?.namespaces ?? []).map(commandTile)}
   </main>`;
 }

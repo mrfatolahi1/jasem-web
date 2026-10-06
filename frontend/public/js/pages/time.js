@@ -9,10 +9,10 @@ import { closingSpan, flagValue, formError } from "../report.js";
 import { DASH, skeletonRows } from "../ui.js";
 import { mountReport } from "./report-page.js";
 
-function topTile(report) {
+function topTile(report, fill) {
   const rows = report?.top_activities.slice(0, 4) ?? [];
-  return html`<section class="jb-tile jb-tile--chart${closingSpan(report)}" aria-labelledby="ta" style="justify-content:flex-start">
-      <h2 id="ta" class="jb-label jb-label--muted" style="margin-bottom:6px">Top</h2>
+  return html`<section class="jb-tile jb-tile--chart jb-fill-${fill}${closingSpan(report)}" aria-labelledby="ta" style="justify-content:flex-start">
+      <h2 id="ta" class="jb-label" style="margin-bottom:6px">Top</h2>
       ${report && !rows.length ? html`<p class="jb-empty" style="padding:0">Nothing tracked yet.</p>`
         : html`<ol class="jb-top">${report
           ? rows.map(([work, minutes]) => html`<li><span>${work}</span><b>${f.chartMinutes(minutes)}</b></li>`)
@@ -20,10 +20,10 @@ function topTile(report) {
     </section>`;
 }
 
-function entriesTile(report, colours) {
+function entriesTile(report, colours, fill) {
   const entries = report?.entries ?? [];
   const row = (entry) => html`<li class="jb-row jb-row--meta"><span class="jb-check" aria-hidden="true" style="--tag:var(--${colours.get(entry.tag) ?? "ink-muted"})"><span></span></span><button class="jb-row-body jb-plain" type="button" aria-haspopup="dialog" data-action="edit" data-id="${entry.id}" data-key="edit-${entry.id}"><span class="jb-row-title">${entry.work}</span><span class="jb-row-meta">#${entry.id} · ${f.weekdayDayMonth(entry.date)} · #${entry.tag}</span></button><span class="jb-due">${entry.time_display}</span></li>`;
-  return html`<section class="jb-tile jb-tile--list jb-span-4" aria-labelledby="en"${attr("aria-busy", !report && "true")}>
+  return html`<section class="jb-tile jb-tile--list jb-fill-${fill} jb-span-4" aria-labelledby="en"${attr("aria-busy", !report && "true")}>
       <div class="jb-list-head"><h2 id="en" class="jb-h1">Entries</h2><span class="jb-more">oldest first · ${report ? entries.length : DASH}</span></div>
       ${report && !entries.length ? html`<p class="jb-empty">Nothing tracked in this period.</p>`
         : html`<ul class="jb-rows">${report ? entries.map(row) : skeletonRows(3, { meta: true })}</ul>`}

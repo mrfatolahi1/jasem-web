@@ -18,7 +18,10 @@
 .jb-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* ---------- page and header ---------- */
-.jb-page { min-height: 100vh; padding: var(--space-hero) var(--space-page-x) var(--space-page-x); background: var(--canvas); }
+/* the page is a full-height column: the grid takes what the header leaves, so
+   a page can let one row grow to the bottom (Tasks: the table) */
+.jb-page { display: flex; flex-direction: column; min-height: 100vh; padding: var(--space-hero) var(--space-page-x) var(--space-page-x); background: var(--canvas); }
+.jb-page > .jb-bento { flex: 1 0 auto; }
 .jb-header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-m) var(--space-xl); margin-bottom: var(--space-xl); }
 .jb-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--font-display); font-size: 24px; font-weight: 400; letter-spacing: -.01em; }
 .jb-mark { display: grid; grid-template-columns: repeat(2, var(--mark-square)); gap: var(--space-mark); }
@@ -39,12 +42,10 @@
 .jb-seg--accent button[aria-selected="true"] { background: var(--orange); color: var(--on-orange); font-weight: 700; }
 
 /* ---------- the bento grid ---------- */
-.jb-bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(var(--grid-row-min), auto); gap: var(--space-l); }
-.jb-bento--tasks { grid-auto-rows: minmax(140px, auto); }
-/* Today (Sicily): three columns; Next up spans two beside Tracked today, the
-   list spans two under it beside Spent and Open, the week and Quick add run
-   full width. Tiles are in that order in the markup, so phones stack them the same way. */
-.jb-bento--today { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.jb-bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(var(--grid-row-min), auto); align-content: start; gap: var(--space-l); }
+/* Tasks: the four cards, the table (which grows to fill the page), Someday and Tags, the New task bar */
+.jb-bento--tasks { grid-auto-rows: minmax(140px, auto); grid-template-rows: auto 1fr auto auto; }
+.jb-bento--tasks.jb-has-error { grid-template-rows: auto auto 1fr auto auto; }
 .jb-span-2 { grid-column: span 2; }
 .jb-span-4 { grid-column: span 4; }
 .jb-span-all { grid-column: 1 / -1; }
@@ -52,6 +53,7 @@
 .jb-rows-3 { grid-row: span 3; }
 @media (max-width: 760px) {
   .jb-bento { grid-template-columns: 1fr; }
+  .jb-bento--tasks, .jb-bento--tasks.jb-has-error { grid-template-rows: none; }
   .jb-bento > * { grid-column: auto !important; grid-row: auto !important; }
 }
 
@@ -70,6 +72,10 @@
 
 .jb-label { margin: 0; font-size: 15px; font-weight: 600; }
 .jb-tile.jb-fill-surface .jb-label, .jb-label--muted { color: var(--ink-muted); }
+/* every tile is coloured: secondary text there is the tile's own foreground,
+   and links follow it */
+[class*="jb-fill-"] { --ink-muted: currentColor; }
+.jb-root [class*="jb-fill-"] a { color: inherit; }
 .jb-detail { margin: 6px 0 0; font-size: 14px; font-weight: 600; }
 .jb-tile-title { margin: 0; font-family: var(--font-display); font-size: 34px; line-height: 1; font-weight: 400; letter-spacing: -.01em; }
 .jb-tile-title--s { font-size: 30px; line-height: 1.05; }
@@ -96,7 +102,7 @@
 .jb-row:hover { background: var(--row-hover); }
 .jb-row--meta { min-height: 60px; }
 .jb-check { flex: none; width: var(--control); height: var(--control); display: grid; place-items: center; border: 0; padding: 0; background: transparent; cursor: pointer; }
-.jb-check > span { width: var(--check); height: var(--check); border-radius: var(--radius-check); border: 2.5px solid var(--tag, var(--ink-muted)); }
+.jb-check > span { width: var(--check); height: var(--check); border-radius: var(--radius-check); border: 2.5px solid var(--tag, var(--ink)); background: var(--surface); }
 .jb-row-body { flex: 1; min-width: 0; }
 .jb-row-title { flex: 1; min-width: 0; margin: 0; font-size: 17px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .jb-row--meta .jb-row-title { font-weight: 600; }
@@ -104,18 +110,23 @@
 
 /* due pill: neutral, today, overdue */
 .jb-due { flex: none; padding: 4px 10px; border-radius: var(--radius-pill); background: var(--pill); color: var(--ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
-.jb-due--today { background: var(--gold); color: var(--on-gold); }
-.jb-due--overdue { background: var(--red); color: var(--on-red); }
+/* due pills are small white things on coloured tiles; a dot carries the state */
+.jb-due--today::before, .jb-due--overdue::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; }
+.jb-due--today::before { background: var(--gold); }
+.jb-due--overdue { color: var(--red-deep); }
+.jb-due--overdue::before { background: var(--red); }
 
 /* ---------- chips and buttons ---------- */
 .jb-chips { display: flex; flex-wrap: wrap; gap: var(--space-s); }
-.jb-chip { height: var(--chip); padding: 0 14px; border: 0; border-radius: var(--radius-pill); font-weight: 700; cursor: pointer; }
-.jb-chip-count { opacity: .8; }
-.jb-chip[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* tag chips: white, with a dot in the tag's colour; the chosen one turns ink */
+.jb-chip { display: inline-flex; align-items: center; gap: 7px; height: var(--chip); padding: 0 14px; border: 0; border-radius: var(--radius-pill); background: var(--surface); color: var(--ink); font-weight: 700; cursor: pointer; }
+.jb-chip::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--tag, var(--ink)); }
+.jb-chip-count { opacity: .7; }
+.jb-chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .jb-btn { height: var(--control); padding: 0 18px; border: 0; border-radius: var(--radius-pill); font-weight: 700; cursor: pointer; }
 .jb-btn--ink { background: var(--ink); color: var(--surface); }
 .jb-btn--light { background: var(--surface); color: var(--red-deep); }
-.jb-btn--ghost { padding: 0 16px; border: 2px solid var(--line-on-dark); background: transparent; color: var(--on-plum); font-weight: 600; }
+.jb-btn--ghost { padding: 0 16px; background: var(--surface); color: var(--ink); font-weight: 600; }
 .jb-toggle { height: var(--toggle); padding: 0 14px; border: 2px solid var(--ink); border-radius: var(--radius-pill); background: transparent; color: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer; }
 .jb-toggle[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 
@@ -136,17 +147,18 @@
 
 /* ---------- charts ---------- */
 .jb-chart-head { margin: 0 0 var(--space-m); display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; color: var(--ink-muted); }
-.jb-chart-head strong { color: var(--ink); font-weight: 600; }
+.jb-chart-head strong { color: inherit; font-weight: 700; }
 .jb-bars { display: flex; align-items: flex-end; gap: 10px; height: var(--chart-week); }
 .jb-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); }
 .jb-bar { width: 100%; min-height: 8px; border-radius: var(--radius-bar); background: var(--bar-idle); }
-.jb-bar--now { background: var(--blue); }
+.jb-bar--now { background: var(--surface); }
 .jb-bar-label { font-size: 12px; font-weight: 600; color: var(--ink-muted); }
 .jb-stacks { display: flex; align-items: flex-end; gap: 14px; height: var(--chart-report); }
 .jb-stack-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); }
 .jb-stack-value { font-size: 13px; font-weight: 700; }
 .jb-stack { width: 100%; display: flex; flex-direction: column; border-radius: var(--radius-stack); overflow: hidden; }
 .jb-stack > span { display: block; }
+.jb-stack > span + span { border-top: 2px solid var(--surface); } /* white between a column's tags */
 .jb-stack--empty { height: 6px; background: var(--bar-idle); }
 .jb-stack-label { font-size: 12.5px; font-weight: 600; color: var(--ink-muted); }
 

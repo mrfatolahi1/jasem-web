@@ -61,6 +61,7 @@ button.jb-row-body > .jb-row-title { white-space: nowrap; overflow: hidden; text
 .jb-move { display: flex; gap: var(--space-s); margin-top: var(--space-m); }
 .jb-move .jb-input { flex: 1; }
 .jb-sheet .jb-rows { margin-bottom: var(--space-m); }
+.jb-sheet .jb-row:hover { background: var(--canvas); }
 .jb-sheet .jb-row > .jb-plain { flex: 1; min-width: 0; height: var(--control); padding-left: 12px; font-size: 17px; font-weight: 600; text-align: left; }
 .jb-row[aria-current="true"] .jb-due { background: var(--orange); color: var(--on-orange); }
 .jb-sheet .jb-input-row .jb-input { flex: 1; }
@@ -81,8 +82,31 @@ button.jb-row-body > .jb-row-title { white-space: nowrap; overflow: hidden; text
   .jb-stacks--dense .jb-stack-col:nth-child(even) .jb-stack-label { visibility: hidden; }
 }
 
+/* ---------- the task table (Tasks) ---------- */
+.jb-table-wrap { overflow-x: auto; }
+.jb-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.jb-table th { padding: 4px 10px 8px; text-align: left; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.jb-table td { padding: 5px 10px; border-top: 1px solid rgba(255, 255, 255, .3); white-space: nowrap; vertical-align: middle; }
+.jb-table tbody tr:hover { background: var(--row-hover); }
+.jb-table .jb-cell-check { width: var(--control); padding: 0; }
+.jb-table .jb-cell-title { width: 100%; max-width: 0; }
+.jb-table-title { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; font-weight: 600; text-align: left; }
+.jb-table .jb-cell-small { font-size: 14px; }
+.jb-priority { display: inline-block; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--pill); color: var(--ink); font-size: 13px; font-weight: 700; }
+.jb-priority--high { color: var(--red-deep); }
+.jb-table .jb-skel { background: var(--bar-idle); }
+@media (max-width: 760px) {
+  .jb-table thead { display: none; }
+  .jb-table, .jb-table tbody { display: block; }
+  .jb-table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 0 10px; border-top: 1px solid rgba(255, 255, 255, .3); }
+  .jb-table td { padding: 0; border: 0; }
+  .jb-table .jb-cell-title { flex: 1 1 calc(100% - var(--control) - 10px); max-width: none; min-width: 0; }
+  .jb-table td:nth-child(3) { margin-left: var(--control); }
+}
+
 /* ---------- help page ---------- */
-.jb-wordmark { display: block; width: 260px; max-width: 100%; height: auto; }
+/* the wordmark uses all five colours, so it sits on a small white plate */
+.jb-wordmark { display: block; width: 260px; max-width: 100%; height: auto; padding: 12px 16px; border-radius: 16px 4px; background: var(--surface); }
 .jb-files { margin: 0; display: grid; gap: var(--space-s); }
 .jb-files dt { font-size: 13px; color: var(--ink-muted); }
 .jb-files dd { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }

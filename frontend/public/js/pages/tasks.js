@@ -1,5 +1,9 @@
 // Tasks: "the whole list, by when", for the list chosen in the header.
-// Reference: the ScreenTasks preview; tile map in screens.md (Tasks).
+// Reference: the ScreenTasks preview; tile map in screens.md (Tasks). Like
+// every page it opens with four cards in the logo colours: Overdue (red),
+// Today (gold), This week (blue) and Open (orange). Under them every open task
+// sits in one table (deadline, priority, tags, when it was added), then
+// Someday, the tag filter and the New task bar.
 // Data: GET /api/tasks/ views, /api/tasks/lists/ and /api/tasks/tags/.
 
 import { api, loadConfig } from "../api.js";
@@ -10,7 +14,7 @@ import { attr, html } from "../html.js";
 import { flagValue, formError } from "../report.js";
 import { openLists } from "../sheet.js";
 import { tagColour, tagStyle } from "../tags.js";
-import { DASH, errorTile, header, painter, segmented, skeletonRows } from "../ui.js";
+import { DASH, errorTile, header, painter, segmented } from "../ui.js";
 
 const listParam = (name) => name || "default";
 
@@ -23,10 +27,31 @@ function editButton(task, className, content = task.title) {
   return html`<button class="${className}" type="button" aria-haspopup="dialog" data-action="edit" data-id="${task.id}" data-key="edit-${task.id}">${content}</button>`;
 }
 
-function metaRow(task, today, busy) {
-  const meta = [`#${task.id}`, task.tags.map((tag) => `#${tag}`).join(" "), f.shortPriority(task.priority)].filter(Boolean).join(" · ");
+function tableRow(task, today, busy) {
   const state = f.dueState(task.deadline, today);
-  return html`<li class="jb-row jb-row--meta">${checkbox(task, busy)}${editButton(task, "jb-row-body jb-plain", html`<span class="jb-row-title">${task.title}</span><span class="jb-row-meta">${meta}</span>`)}<span class="jb-due${state ? ` ${state}` : ""}">${f.dueLabel(task.deadline, today)}</span></li>`;
+  const added = [`#${task.id}`, task.created && f.dayMonth(task.created)].filter(Boolean).join(" · ");
+  return html`<tr>
+      <td class="jb-cell-check">${checkbox(task, busy)}</td>
+      <td class="jb-cell-title">${editButton(task, "jb-plain jb-table-title")}</td>
+      <td><span class="jb-due${state ? ` ${state}` : ""}">${f.dueLabel(task.deadline, today)}</span></td>
+      <td class="jb-cell-small">${task.deadline ? f.weekdayDayMonth(task.deadline) : DASH}</td>
+      <td><span class="jb-priority jb-priority--${task.priority}">${task.priority}</span></td>
+      <td class="jb-cell-small">${task.tags.length ? task.tags.map((tag) => `#${tag}`).join(" ") : DASH}</td>
+      <td class="jb-cell-small">${added}</td>
+    </tr>`;
+}
+
+/** Every open task in the list (and tag, if one is chosen), soonest deadline first. */
+function tableTile(tasks, state, today) {
+  const tagged = state.tag ? ` tagged #${state.tag}` : "";
+  const loading = [62, 48, 70, 40].map((width) => html`<tr aria-hidden="true"><td class="jb-cell-check"><span class="jb-check"><span></span></span></td><td colspan="6"><span class="jb-skel" style="max-width:${width}%"></span></td></tr>`);
+  return html`<section class="jb-tile jb-tile--list jb-fill-plum jb-span-4" aria-labelledby="all" style="padding-bottom:14px"${attr("aria-busy", !tasks && "true")}>
+      <div class="jb-list-head"><h2 id="all" class="jb-h1">All open tasks${tagged} · ${tasks ? tasks.length : DASH}</h2><span class="jb-more">soonest deadline first</span></div>
+      ${tasks && !tasks.length ? html`<p class="jb-empty">No open tasks${tagged}.</p>` : html`<div class="jb-table-wrap"><table class="jb-table">
+        <thead><tr><th scope="col"><span class="jb-sr-only">Done</span></th><th scope="col">Task</th><th scope="col">Due</th><th scope="col">Deadline</th><th scope="col">Priority</th><th scope="col">Tags</th><th scope="col">Added</th></tr></thead>
+        <tbody>${tasks ? tasks.map((task) => tableRow(task, today, state.busy)) : loading}</tbody>
+      </table></div>`}
+    </section>`;
 }
 
 /** Overdue (red) and Today (gold): the first task large, the rest as rows. */
@@ -38,8 +63,8 @@ function whenTile({ id, name, fill, tasks, empty, today, busy, late }) {
     </section>`;
   }
   if (!tasks.length) {
-    return html`<section class="jb-tile" aria-labelledby="${id}">
-      <h2 id="${id}" class="jb-label jb-label--muted">${name}</h2>
+    return html`<section class="jb-tile jb-fill-${fill}" aria-labelledby="${id}">
+      <h2 id="${id}" class="jb-label">${name}</h2>
       <div><p class="jb-tile-title jb-tile-title--s">${empty}</p></div>
     </section>`;
   }
@@ -56,16 +81,35 @@ function whenTile({ id, name, fill, tasks, empty, today, busy, late }) {
     </section>`;
 }
 
-function listTile({ id, title, tasks, today, busy, empty, span }) {
-  return html`<section class="jb-tile jb-tile--list ${span}" aria-labelledby="${id}" style="padding-bottom:12px"${attr("aria-busy", !tasks && "true")}>
-      <h2 id="${id}" class="jb-h2">${title} · ${tasks ? tasks.length : DASH}</h2>
-      ${tasks && !tasks.length ? html`<p class="jb-empty">${empty}</p>`
-        : html`<ul class="jb-rows">${tasks ? tasks.map((task) => metaRow(task, today, busy)) : skeletonRows(4, { meta: true })}</ul>`}
+/** A count card for the top row: the number large, one line of detail under it. */
+function countCard({ fill, label, count, detail }) {
+  return html`<section class="jb-tile jb-fill-${fill}" aria-label="${label}"${attr("aria-busy", count === undefined && "true")}>
+      <h2 class="jb-label">${label}</h2>
+      <div><p class="jb-figure jb-figure--l">${count ?? DASH}</p>${detail ? html`<p class="jb-detail">${detail}</p>` : ""}</div>
     </section>`;
 }
 
+function weekCard(v, today) {
+  const next = v?.week[0];
+  return countCard({
+    fill: "blue",
+    label: "This week",
+    count: v?.week.length,
+    detail: v && (next ? `next: ${next.title} · ${f.dueLabel(next.deadline, today)}` : "nothing else this week"),
+  });
+}
+
+function openCard(v) {
+  return countCard({
+    fill: "orange",
+    label: "Open",
+    count: v?.all.length,
+    detail: v && `${v.someday.length} someday · ${v.later.length} later`,
+  });
+}
+
 function somedayTile(tasks) {
-  return html`<section class="jb-tile jb-tile--chart jb-fill-plum jb-span-2" aria-labelledby="sd">
+  return html`<section class="jb-tile jb-tile--chart jb-fill-gold jb-span-2" aria-labelledby="sd">
       <h2 id="sd" class="jb-label" style="margin-bottom:10px">Someday · ${tasks ? tasks.length : DASH}</h2>
       ${tasks && !tasks.length ? html`<p class="jb-detail" style="margin:0">Every open task has a deadline.</p>` : html`<ul class="jb-chips" style="list-style:none;margin:0;padding:0">
         ${(tasks ?? []).map((task) => html`<li>${editButton(task, "jb-btn jb-btn--ghost")}</li>`)}
@@ -75,10 +119,10 @@ function somedayTile(tasks) {
 
 function tagsTile(tags, active) {
   const shown = tags && active && !tags.some((item) => item.tag === active) ? [...tags, { tag: active, count: 0 }] : tags;
-  return html`<section class="jb-tile jb-tile--chart jb-span-2" aria-labelledby="tg">
-      <h2 id="tg" class="jb-label jb-label--muted" style="margin-bottom:10px">Tags</h2>
+  return html`<section class="jb-tile jb-tile--chart jb-fill-red jb-span-2" aria-labelledby="tg">
+      <h2 id="tg" class="jb-label" style="margin-bottom:10px">Tags</h2>
       ${shown && !shown.length ? html`<p class="jb-empty" style="padding:0">No tags yet; add one with -t.</p>` : html`<div class="jb-chips">
-        ${(shown ?? []).map(({ tag, count }) => html`<button type="button" class="jb-chip jb-fill-${tagColour(tag)}" aria-pressed="${tag === active}" data-action="tag" data-tag="${tag}" data-key="tag-${tag}">${tag} <span class="jb-chip-count">${count}</span></button>`)}
+        ${(shown ?? []).map(({ tag, count }) => html`<button type="button" class="jb-chip" style="--tag:var(--${tagColour(tag)})" aria-pressed="${tag === active}" data-action="tag" data-tag="${tag}" data-key="tag-${tag}">${tag} <span class="jb-chip-count">${count}</span></button>`)}
       </div>`}
     </section>`;
 }
@@ -115,14 +159,16 @@ function view(state) {
   const v = state.views;
   const today = f.todayIso();
   return html`${header("/tasks", listSelector(state))}
-  <main class="jb-bento jb-bento--tasks">
+  <main class="jb-bento jb-bento--tasks${state.error ? " jb-has-error" : ""}">
+    <h1 class="jb-sr-only">Tasks</h1>
     ${errorTile(state.error, { retry: state.loadFailed })}
     ${whenTile({ id: "ov", name: "Overdue", fill: "red", tasks: v?.overdue, empty: "Nothing late", today, busy: state.busy, late: true })}
     ${whenTile({ id: "td", name: "Today", fill: "gold", tasks: v?.today, empty: "Nothing today", today, busy: state.busy })}
-    ${listTile({ id: "wk", title: "This week", tasks: v?.week, today, busy: state.busy, empty: "Nothing else this week.", span: "jb-span-2 jb-rows-3" })}
+    ${weekCard(v, today)}
+    ${openCard(v)}
+    ${tableTile(v?.all, state, today)}
     ${somedayTile(v?.someday)}
     ${tagsTile(v?.tags, state.tag)}
-    ${v?.later.length ? listTile({ id: "lt", title: "Later", tasks: v.later, today, busy: state.busy, span: "jb-span-4" }) : ""}
     ${newTaskBar(state)}
   </main>`;
 }

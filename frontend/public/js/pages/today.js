@@ -1,7 +1,8 @@
 // Today: "what needs me now". Every tile comes from GET /api/dashboard/.
-// Reference: the ScreenToday preview, in the Sicily pack's three-column layout:
-// Next up (two columns) and Tracked today, then Needs you (two columns, two
-// rows) beside Spent today and Open tasks, then the week and Quick add.
+// Reference: the ScreenToday preview. Like every page it opens with four cards
+// in the logo colours: Next up (red), Tracked today (blue), Spent today (gold)
+// and Open tasks (orange). Below them Needs you spans two columns and two rows
+// beside the week and Quick add.
 
 import { api } from "../api.js";
 import { editTask } from "../editors.js";
@@ -23,7 +24,7 @@ function taskRow(task, today, busy) {
 function needsYou(data, busy) {
   const rows = !data ? skeletonRows(7)
     : data.tasks.map((task) => taskRow(task, data.date, busy));
-  return html`<section class="jb-tile jb-tile--list jb-span-2 jb-rows-2" aria-labelledby="att"${attr("aria-busy", !data && "true")}>
+  return html`<section class="jb-tile jb-tile--list jb-fill-plum jb-span-2 jb-rows-2" aria-labelledby="att"${attr("aria-busy", !data && "true")}>
       <div class="jb-list-head"><h2 id="att" class="jb-h1">Needs you</h2><a class="jb-more" href="/tasks">all ${data ? data.open_count : DASH} →</a></div>
       ${data && !data.tasks.length ? html`<p class="jb-empty">Nothing needs you today.</p>` : html`<ul class="jb-rows">${rows}</ul>`}
     </section>`;
@@ -32,16 +33,16 @@ function needsYou(data, busy) {
 function nextUp(data) {
   const task = data?.tasks[0];
   if (data && !task) {
-    return html`<section class="jb-tile jb-span-2" aria-label="Next up">
-      <h2 class="jb-label jb-label--muted">Next up</h2>
+    return html`<section class="jb-tile jb-fill-red" aria-label="Next up">
+      <h2 class="jb-label">Next up</h2>
       <p class="jb-tile-title">All clear</p>
     </section>`;
   }
-  const late = !data || (task.deadline && task.deadline < data.date);
-  return html`<section class="jb-tile jb-span-2${late ? " jb-fill-red" : ""}" aria-label="Next up">
-      <h2 class="jb-label${late ? "" : " jb-label--muted"}">Next up${task ? ` · ${f.dueWords(task.deadline, data.date)}` : ""}</h2>
+  // Always red: it is the red card of the four on top, late or not.
+  return html`<section class="jb-tile jb-fill-red" aria-label="Next up">
+      <h2 class="jb-label">Next up${task ? ` · ${f.dueWords(task.deadline, data.date)}` : ""}</h2>
       <div>${task
-        ? html`<p class="jb-tile-title"><button type="button" class="jb-plain" aria-haspopup="dialog" data-action="edit" data-id="${task.id}" data-key="next-edit">${task.title}</button></p><button class="jb-btn ${late ? "jb-btn--light" : "jb-btn--ink"}" type="button" style="margin-top:14px" aria-label="Done: ${task.title}" data-action="done" data-id="${task.id}" data-key="next-done">Done</button>`
+        ? html`<p class="jb-tile-title"><button type="button" class="jb-plain" aria-haspopup="dialog" data-action="edit" data-id="${task.id}" data-key="next-edit">${task.title}</button></p><button class="jb-btn jb-btn--light" type="button" style="margin-top:14px" aria-label="Done: ${task.title}" data-action="done" data-id="${task.id}" data-key="next-done">Done</button>`
         : html`<p class="jb-tile-title">${DASH}</p>`}</div>
     </section>`;
 }
@@ -58,7 +59,7 @@ function thisWeek(data) {
   const trend = data?.time_trend ?? days.map(() => 0);
   const max = Math.max(...trend);
   const totals = data ? `${f.formatMinutes(sum(data.time_trend))} · ${f.formatAmount(sum(data.spend_trend))}` : DASH;
-  return html`<section class="jb-tile jb-tile--chart jb-span-all" aria-labelledby="wk">
+  return html`<section class="jb-tile jb-tile--chart jb-fill-blue jb-span-2" aria-labelledby="wk">
       <h2 id="wk" class="jb-chart-head"><span>This week</span><strong>${totals}</strong></h2>
       <div class="jb-bars" aria-hidden="true">
         ${days.map((day, index) => html`<div class="jb-bar-col"><span class="jb-bar${data && index === days.length - 1 ? " jb-bar--now" : ""}" style="height:${max ? Math.max(8, Math.round((trend[index] / max) * 66)) : 8}px"></span><span class="jb-bar-label">${f.weekday(day)}</span></div>`)}
@@ -67,7 +68,7 @@ function thisWeek(data) {
 }
 
 function quickAdd(state) {
-  return html`<form class="jb-tile jb-tile--form jb-fill-orange jb-span-all jb-form" data-form="quick" novalidate>
+  return html`<form class="jb-tile jb-tile--form jb-fill-orange jb-span-2 jb-form" data-form="quick" novalidate>
       <label for="qa" class="jb-form-label">Quick add</label>
       <div class="jb-input-row">
         <input id="qa" class="jb-input jb-input--grow" placeholder="${PLACEHOLDERS[state.kind]}" autocomplete="off"${attr("aria-describedby", state.formError && "qa-error")}>
@@ -84,14 +85,14 @@ function view(state) {
   const data = state.data;
   const late = data ? data.tasks.filter((task) => task.deadline && task.deadline < data.date).length : 0;
   return html`${header("/", html`<span class="jb-header-end">${data ? f.longDate(data.date, data.weekday) : ""}</span>`)}
-  <main class="jb-bento jb-bento--today">
+  <main class="jb-bento">
     <h1 class="jb-sr-only">Today</h1>
     ${errorTile(state.error, { retry: state.loadFailed })}
     ${nextUp(data)}
     ${stat("blue", "Tracked today", data ? f.figure(data.tracked_today_display) : DASH)}
-    ${needsYou(data, state.busy)}
     ${stat("gold", "Spent today", data ? f.figure(data.spent_today_display) : DASH)}
-    ${stat("plum", "Open tasks", html`${data ? data.open_count : DASH}${late ? html` <small>· ${late} late</small>` : ""}`, " jb-figure--l")}
+    ${stat("orange", "Open tasks", html`${data ? data.open_count : DASH}${late ? html` <small>· ${late} late</small>` : ""}`, " jb-figure--l")}
+    ${needsYou(data, state.busy)}
     ${thisWeek(data)}
     ${quickAdd(state)}
   </main>`;
