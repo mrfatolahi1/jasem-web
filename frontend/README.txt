@@ -1,1 +1,0 @@
-Frontend should be implemented here, api doc is backend/openapi.yaml.

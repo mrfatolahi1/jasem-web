@@ -8,6 +8,7 @@ here are visible to the CLI immediately, and vice versa.
 
 ```text
 backend/   Django JSON API; no models, ORM, migrations, or database
+frontend/  The web app: plain HTML, CSS and JavaScript in the Jasem Bento design
 docs/      Landing page for the jasem CLI (index.html), served by GitHub Pages
 ```
 
@@ -24,6 +25,15 @@ python manage.py runserver 127.0.0.1:8000
 ```
 
 Landing page at <http://127.0.0.1:8000/>, API at <http://127.0.0.1:8000/api/>, docs at <http://127.0.0.1:8000/api/docs/>.
+
+Then, in another terminal, start the web app (Node 18+, no install step):
+
+```sh
+cd frontend
+npm start
+```
+
+The app is at <http://localhost:3500/>. See [frontend/README.md](frontend/README.md).
 
 ## Data
 

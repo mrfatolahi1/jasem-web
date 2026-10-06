@@ -1,0 +1,91 @@
+/* jasem-web additions to the Jasem Bento stylesheet.
+   Load after tokens.css and bundle.css. These cover what the design leaves to
+   the app: loading and error states, the edit sheet, the lists manager, the
+   help page and long report charts. They follow the same rules: jb- classes,
+   token values, no shadows or borders. */
+
+:root {
+  --scrim: rgba(22, 24, 29, 0.45); /* ink at 45%, behind the edit sheet */
+}
+
+body { margin: 0; background: var(--canvas); }
+[hidden] { display: none !important; }
+
+/* ---------- header extras ---------- */
+.jb-push { margin-left: auto; }
+.jb-help-link { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border-radius: var(--radius-pill); background: var(--surface); text-decoration: none; font-size: 18px; font-weight: 700; }
+.jb-root .jb-help-link[aria-current="page"] { background: var(--ink); color: var(--surface); opacity: 1; }
+
+/* ---------- buttons that read as text ---------- */
+.jb-plain { margin: 0; padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; color: inherit; text-align: inherit; cursor: pointer; }
+button.jb-row-title { display: block; text-align: left; }
+button.jb-row-body { display: block; text-align: left; }
+button.jb-row-body > span { display: block; }
+button.jb-row-body > .jb-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-check[data-state="done"] > span { background: var(--tag, var(--ink-muted)); }
+
+/* ---------- loading and empty ---------- */
+.jb-skel { display: block; height: 14px; border-radius: var(--radius-pill); background: var(--bar-idle); }
+.jb-skel--pill { flex: none; width: 64px; height: 24px; }
+.jb-row .jb-skel:not(.jb-skel--pill) { flex: 1; max-width: 60%; }
+.jb-empty { margin: 0; padding: 14px 0; font-size: 17px; font-weight: 500; color: var(--ink-muted); }
+
+/* ---------- errors ---------- */
+.jb-form-error { margin: 0; font-size: 14px; font-weight: 600; color: inherit; }
+.jb-form--bar .jb-form-error { flex-basis: 100%; }
+.jb-error-text { margin: 0 0 var(--space-m); font-size: 22px; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
+
+/* ---------- long titles inside tiles ---------- */
+.jb-tile-title { overflow-wrap: anywhere; }
+.jb-tile-title .jb-plain { text-align: left; }
+.jb-btn--ghost { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* ---------- the rest of an Overdue or Today tile ---------- */
+.jb-rest { list-style: none; margin: var(--space-s) 0 0; padding: 0; }
+.jb-rest li { display: flex; align-items: center; gap: 2px; min-height: var(--control); }
+.jb-rest .jb-check { --tag: currentColor; margin-left: -11px; }
+.jb-rest .jb-row-title { font-size: 16px; font-weight: 600; }
+.jb-rest-due { flex: none; font-size: 13px; font-weight: 700; }
+
+/* ---------- edit sheet and lists manager ---------- */
+.jb-sheet { width: min(560px, calc(100vw - 2 * var(--space-l))); max-height: calc(100vh - 2 * var(--space-hero)); margin: auto; padding: var(--space-tile); border: 0; border-radius: var(--radius-tile); background: var(--surface); color: var(--ink); overflow: auto; }
+.jb-sheet::backdrop { background: var(--scrim); }
+.jb-sheet .jb-input { width: 100%; background: var(--canvas); }
+.jb-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-m); margin: var(--space-m) 0 var(--space-xl); }
+.jb-field { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+.jb-field--wide { grid-column: 1 / -1; }
+.jb-field-error { margin: 0; font-size: 14px; font-weight: 600; color: var(--red-deep); }
+.jb-sheet-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-s); }
+.jb-btn--outline { padding: 0 16px; border: 2px solid var(--ink); background: transparent; color: var(--ink); font-weight: 600; }
+.jb-btn--danger { margin-left: auto; padding: 0 12px; background: transparent; color: var(--red-deep); }
+.jb-move { display: flex; gap: var(--space-s); margin-top: var(--space-m); }
+.jb-move .jb-input { flex: 1; }
+.jb-sheet .jb-rows { margin-bottom: var(--space-m); }
+.jb-sheet .jb-row > .jb-plain { flex: 1; min-width: 0; height: var(--control); padding-left: 12px; font-size: 17px; font-weight: 600; text-align: left; }
+.jb-row[aria-current="true"] .jb-due { background: var(--orange); color: var(--on-orange); }
+.jb-sheet .jb-input-row .jb-input { flex: 1; }
+.jb-sheet .jb-submit { height: var(--control-l); }
+@media (max-width: 760px) {
+  .jb-fields { grid-template-columns: 1fr; }
+  .jb-sheet { width: calc(100vw - 2 * var(--space-l)); }
+}
+
+/* ---------- long report charts (a month of days) ---------- */
+.jb-stacks--dense { gap: 4px; }
+.jb-stacks--dense .jb-stack-value { font-size: 11px; white-space: nowrap; }
+.jb-stacks--dense .jb-stack-label { font-size: 11px; }
+@media (max-width: 760px) {
+  .jb-stacks { gap: 6px; }
+  .jb-stacks--dense { gap: 2px; }
+  .jb-stacks--dense .jb-stack-value { visibility: hidden; }
+  .jb-stacks--dense .jb-stack-col:nth-child(even) .jb-stack-label { visibility: hidden; }
+}
+
+/* ---------- help page ---------- */
+.jb-wordmark { display: block; width: 260px; max-width: 100%; height: auto; }
+.jb-files { margin: 0; display: grid; gap: var(--space-s); }
+.jb-files dt { font-size: 13px; color: var(--ink-muted); }
+.jb-files dd { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.jb-commands { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-m); }
+.jb-commands code { font: inherit; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.jb-commands p { margin: 2px 0 0; font-size: 13px; color: var(--ink-muted); overflow-wrap: anywhere; }

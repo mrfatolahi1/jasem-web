@@ -1,0 +1,13 @@
+{
+  "name": "jasem-web-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The jasem-web frontend: plain HTML, CSS and JavaScript in the Jasem Bento design.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.mjs",
+    "tokens": "node scripts/tokens.mjs",
+    "test": "node --test tests/"
+  }
+}
